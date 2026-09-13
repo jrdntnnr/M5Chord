@@ -1,4 +1,4 @@
-name: Build and test
+name: Build firmware
 
 on:
   push:
@@ -20,7 +20,4 @@ jobs:
           python-version: '3.11'
       - run: python -m pip install platformio==6.1.18 esptool==4.5.1
       - run: pio run -e cardputer-universal -e cardputer-adv -e cardputer-diagnostics
-      - run: cmake -S . -B build && cmake --build build -j 2 && ctest --test-dir build --output-on-failure
-      - run: cmake -S . -B build-sanitized -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined" && cmake --build build-sanitized -j 2 && ctest --test-dir build-sanitized --output-on-failure
-      - run: python -m unittest discover -s tools -p 'test_package_firmware.py'
       - run: python tools/package_firmware.py --output dist/M5Chord-current

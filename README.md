@@ -2,13 +2,13 @@
 
 Version: **1.1.0**. Versioning uses `MAJOR.MINOR.PATCH`: new compatible features increase MINOR, fixes alone increase PATCH, and breaking changes increase MAJOR. The previous [1.0 release](https://github.com/jrdntnnr/M5Chord/releases/tag/v1.0) remains available.
 
-New in 1.1.0: standard BLE-MIDI discovery, handshake changes and readable logs, Unit MIDI DIN input, explicit input selection, seven shortcut-help pages, a saved layer-channel count, and SD MIDI-file playback. See the [1.1.0 release notes](docs/RELEASE_1.1.0.md). The BLE repair remains a candidate until repeated physical cold-start tests pass.
+New in 1.1.0: standard BLE-MIDI discovery, handshake changes and readable logs, Unit MIDI DIN input, explicit input selection, seven shortcut-help pages, a saved layer-channel count, and SD MIDI-file playback. See the [1.1.0 release notes](https://github.com/jrdntnnr/M5Chord/releases/tag/v1.1.0). The BLE repair remains a candidate until repeated physical cold-start tests pass.
 
 M5Chord is a standalone harmonic MIDI controller for M5Stack Cardputer 1.0, 1.1 and ADV. Use a MIDI keyboard, pad controller, sequencer or other MIDI source over USB, Bluetooth LE or DIN. Turn notes into chords, add extensions, play arpeggios and strums, and send the result to any receiver that accepts the generated MIDI messages over DIN MIDI.
 
 M5Chord generates **MIDI, not audio**. An M5Stack Unit MIDI in `SEPARATE` mode provides the DIN input/output interface; the firmware does not add a synth engine or controls for the Unit's onboard synthesizer. No computer is needed while playing.
 
-[Download M5Chord 1.1.0](https://github.com/jrdntnnr/M5Chord/releases/tag/v1.1.0) · [Report an issue](https://github.com/jrdntnnr/M5Chord/issues) · [Release notes](docs/RELEASE_1.1.0.md)
+[Download M5Chord 1.1.0](https://github.com/jrdntnnr/M5Chord/releases/tag/v1.1.0) · [Report an issue](https://github.com/jrdntnnr/M5Chord/issues)
 
 > **Compatibility:** M5Chord targets standard MIDI 1.0, not a particular controller or instrument. USB power/descriptor requirements and BLE discovery requirements still apply; see [supported connections](#supported-connections) and [device-specific test notes](#device-specific-test-notes).
 
@@ -26,7 +26,7 @@ M5Chord generates **MIDI, not audio**. An M5Stack Unit MIDI in `SEPARATE` mode p
 - [Pad setup and MIDI Learn](#nine-pad-setup)
 - [Profiles](#controller-profiles), [loops and presets](#midi-loops-and-presets)
 - [Display feedback](#display-feedback) and [troubleshooting](#troubleshooting)
-- [Build from source](#build-and-flash) and [tests](#desktop-tests)
+- [Build from source](#build-and-flash)
 
 ## Compatibility
 
@@ -38,7 +38,7 @@ One universal binary selects the appropriate keyboard driver automatically. No r
 | 1.1 | Same GPIO keyboard matrix | Supported by shared wiring/driver; physical test still pending |
 | ADV | TCA8418 keyboard | Latest diagnostic build approved by user; exhaustive release checks remain pending |
 
-Release 1.1.0 retains the shared compatibility code and adds the features described above. Do not interpret build success as exhaustive hardware validation. See [compatibility details](docs/COMPATIBILITY.md) and [recorded results](docs/SMK37_TEST_RESULTS.md). This project is independent of M5Stack and is not an official M5Stack product.
+Release 1.1.0 retains the shared compatibility code and adds the features described above. Do not interpret build success as exhaustive hardware validation. This project is independent of M5Stack and is not an official M5Stack product.
 
 ## Supported connections
 
@@ -203,22 +203,9 @@ To package a release, use the Python interpreter running PlatformIO with its esp
 
 ```sh
 python tools/package_firmware.py --output dist/M5Chord-current
-python -m unittest discover -s tools -p 'test_package_firmware.py'
 ```
 
 Use `--core-dir` if PlatformIO's packages are not in `.pio`. The package script derives the version from AppInfo, accepts development/RC versions, requires committed tracked source and no untracked files, rejects diagnostic firmware, and requires a new output directory. It never reads flash from a connected device. The published v1.0 tag retains its original packaging instructions.
-
-## Desktop tests
-
-```sh
-cmake -S . -B build
-cmake --build build
-ctest --test-dir build --output-on-failure
-```
-
-Install the pinned PlatformIO dependencies first; host JSON tests use the same ArduinoJson headers. An alternative location can be supplied with `-DARDUINOJSON_INCLUDE=/absolute/path/to/ArduinoJson/src`.
-
-Tests cover harmony, transport parsing, scheduling, note ownership, panic, exact-modifier keyboard edges, menu confirmation, MIDI Learn/edit/delete, playstyles, overlapping extension controls, profile/preset/loop validation, recording/overdub/undo, shared live/loop notes, diagnostic ring wrap, and DIN congestion recovery.
 
 ## First connection
 
@@ -255,7 +242,7 @@ These devices were used for testing; they are **not required hardware** and do n
 - **EasyPlay1 Plus:** reported working as a directly connected USB-MIDI input in its MIDI mode. A powered USB hub did not work; hubs remain unsupported.
 - **SMK-37:** used for BLE-MIDI testing; one observed advertised name was `SMK-37 Pro_BLE`. It can connect without registering keys. The reported workaround is to switch the keyboard off and back on twice while M5Chord stays running. Cardputer-side reconnect and an older subscription toggle did not resolve the tested first-connection failure. The 1.1.0 read/MTU changes are not a verified fix. Direct USB interoperability has not been established.
 
-Detailed setup, image hashes and limitations of the observations are in [physical test results](docs/SMK37_TEST_RESULTS.md). Results from one controller, receiver or firmware build are not blanket certification of other devices.
+Results from one controller, receiver or firmware build are not blanket certification of other devices.
 
 ## BLE logging
 
@@ -266,10 +253,10 @@ For live diagnosis over a USB cable to a computer, build **cardputer-diagnostics
 ```sh
 PLATFORMIO_CORE_DIR="$PWD/.pio" pio run -e cardputer-diagnostics
 PLATFORMIO_CORE_DIR="$PWD/.pio" pio run -e cardputer-diagnostics -t upload --upload-port PORT
-python tools/read_ble_log.py --port PORT --seconds 60 --output .local/ble-startup.log
+pio device monitor --port PORT --baud 115200
 ```
 
-Use the PlatformIO Python interpreter or install `pyserial` in a virtual environment. The capture script refuses to overwrite an existing log. It opens the serial port without an intentional reset and requests the buffered trace. `--reconnect` requests a BLE reconnect for another trial. In a serial terminal, `l` replays the trace, `r` requests reconnect, and `p` invokes panic. Console output is bounded and nonblocking; a disconnected computer must not hold up MIDI.
+In the serial monitor, `l` replays the trace, `r` requests BLE reconnect, and `p` invokes panic. Console output is bounded and nonblocking; a disconnected computer must not hold up MIDI. Exit the monitor before flashing.
 
 To test: leave Cardputer USB attached, disconnect other BLE hosts, start the logger, turn the MIDI controller on once and play notes. Look for `OPEN`, `DISCOVERY`, `READ_RESULT`, `REGISTER_RESULT`, `CCCD_ON`, `WRITE_RESULT`, `READY`, then `NOTIFY` and increasing `N`/`E`. `status=0` on GATT results means success; NOTIFY status reports the number of decoded events. `LINK`, `MTU_REQUEST` and `MTU` expose connection/MTU setup; a fallback request is only logged when needed. The old automatic CCCD off/on repair is no longer used. Save logs for both failing and working sessions, recording hardware and startup order. Review device names/MIDI payloads before sharing logs publicly.
 
@@ -470,9 +457,9 @@ Playback sends the file's MIDI directly to DIN output, without chord/scale/arp t
 
 Supported: SMF format 0 and 1, PPQN timing, running status, tempo changes, multiple tracks, Note On/Off (including velocity-zero release), CC below 120, program change, pressure and pitch bend. Limits: **1 MiB file, 32 tracks, 256 simultaneous file-owned notes, 24-hour duration**, with bounded shared scheduler/output queues. The device no longer has a 2,048-event whole-song limit: it validates the complete file, then streams through a fixed **512-event read-ahead buffer**. Files exceeding parse limits are rejected, not partially played. Dense output may exceed DIN bandwidth; overload recovery prioritizes release safety. Unmatched notes are released at end/stop. SysEx and non-tempo metadata are skipped; CC 120–127 are suppressed to avoid file-triggered channel-wide resets. Format 2, SMPTE division, nonzero MIDI-port metadata, RIFF/RMID and MIDI 2.0 files are not supported. Export format 0/1 PPQN from your sequencer if needed. These limits make this a small controller-side player, not an unrestricted DAW file engine.
 
-The browser lists up to 32 files, alphabetized after discovery, and examines at most 512 directory entries. Subfolders are not searched. A background storage task owns the open file and uses a fixed read cache; the musical engine only consumes buffered events. MIDI event processing does not access SD, allocate memory, or bypass `VoiceId`, the scheduler and active-note registry. **Keep the SD card inserted while playing.** An SD read error or buffer underrun stops playback and releases file-owned notes; the reason stays on the player page. Restarting playback rewinds and buffers again. The existing output-keyboard view shows dispatched file notes alongside live output. Physical SD playback, DIN receiver behavior and sustained-load margins remain acceptance checks in [TEST_PLAN.md](docs/TEST_PLAN.md).
+The browser lists up to 32 files, alphabetized after discovery, and examines at most 512 directory entries. Subfolders are not searched. A background storage task owns the open file and uses a fixed read cache; the musical engine only consumes buffered events. MIDI event processing does not access SD, allocate memory, or bypass `VoiceId`, the scheduler and active-note registry. **Keep the SD card inserted while playing.** An SD read error or buffer underrun stops playback and releases file-owned notes; the reason stays on the player page. Restarting playback rewinds and buffers again. The existing output-keyboard view shows dispatched file notes alongside live output. Physical SD playback, DIN receiver behavior and sustained-load margins still require broader hardware verification.
 
-For a read-only desktop check of a file, build with CMake and run `build/midi_file_check /path/to/song.mid`. It validates the complete file and simulates two buffered plays through the real scheduler/registry with four output channels. It reports channel attacks/releases and fails on dropped events or remaining note owners. This does not measure physical SD latency or DIN bandwidth. Diagnostic USB console summaries also include filename, player state, validation percentage and playback time.
+Diagnostic USB console summaries also include filename, player state, validation percentage and playback time.
 
 ## General MIDI Learn
 
@@ -509,13 +496,11 @@ The native ESP-IDF USB Host Library scans the active configuration, bounds-check
 - One USB device and the first claimable MIDIStreaming interface are supported at a time.
 - BLE MIDI supports one automatically discovered standard BLE-MIDI peripheral at a time and has no on-device chooser.
 - USB is host input, not a USB-MIDI device output to a DAW. BLE is controller input only.
-- No SysEx forwarding, external-clock-follow mode, ORC secret-chord tables, or factory-pattern library.
+- No SysEx forwarding, external-clock-follow mode, or factory-pattern library.
 - Loops retain recorded tempo/channels, and notes crossing a loop boundary are clipped. There is no count-in or file naming UI.
 - SD MIDI-file playback has explicit file-size, format, track and simultaneous-note limits and remaps selected source channels; see its section above. It does not preserve a General MIDI drum-channel reservation.
 - No synth, audio, effects, drum sounds, or waveform display.
 - The scheduler is deterministic and bounded, but sustained DIN saturation needs physical stress measurement.
-
-See [docs/HARDWARE.md](docs/HARDWARE.md), [docs/MIDI_BEHAVIOR.md](docs/MIDI_BEHAVIOR.md), [docs/USB_DEBUG.md](docs/USB_DEBUG.md), and [docs/TEST_PLAN.md](docs/TEST_PLAN.md) before hardware testing.
 
 ## Troubleshooting
 
@@ -539,4 +524,4 @@ For a bug report, include Cardputer revision, M5Chord version, controller model/
 
 ## License and credits
 
-M5Chord source is MIT-licensed; see [LICENSE](LICENSE). Dependencies and bundled font data retain their own licenses; see [third-party notices](THIRD_PARTY_NOTICES.md). Thanks to M5Stack, Espressif, Arduino, the library authors and font designers. Controller inspiration and remaining differences are recorded in the [ORC-1 assessment](docs/ORC1_CONTROLLER_ASSESSMENT.md); M5Chord does not include synth features.
+M5Chord source is MIT-licensed; see [LICENSE](LICENSE). Dependencies and bundled font data retain their own licenses; see [third-party notices](THIRD_PARTY_NOTICES.md). Thanks to M5Stack, Espressif, Arduino, the library authors and font designers.

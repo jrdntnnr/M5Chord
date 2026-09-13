@@ -123,7 +123,6 @@ def main():
     shutil.copyfile(root / "THIRD_PARTY_NOTICES.md", args.output / "THIRD_PARTY_NOTICES.md")
     shutil.copytree(root / "licenses", args.output / "licenses")
     shutil.copyfile(root / "README.md", args.output / "README.md")
-    shutil.copytree(root / "docs", args.output / "docs")
     update_segments = []
     for offset, path in paths.items():
         target = application if offset == 0x10000 else args.output / path.name
@@ -139,7 +138,7 @@ def main():
         "chip": "esp32s3",
         "flash_bytes": FLASH_SIZE,
         "models": ["Cardputer 1.0", "Cardputer 1.1", "Cardputer ADV"],
-        "hardware_acceptance": "User approved the preceding diagnostic build for 1.1.0; exhaustive per-revision and stable-image hardware checks remain pending; see docs/SMK37_TEST_RESULTS.md",
+        "hardware_acceptance": "User approved the preceding diagnostic build for 1.1.0; exhaustive per-revision and stable-image hardware checks remain pending",
         "known_issues": ["SMK-37 BLE can connect without key input. Switch keyboard off/on twice; fix planned for a coming version."],
         "factory": {**file_record(factory, 0), "resets_nvs": True},
         "application": {**file_record(application, 0x10000), "requires_matching_partition_layout": True},
@@ -150,39 +149,6 @@ def main():
     (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     records = [manifest["factory"], *update_segments]
     (args.output / "SHA256SUMS").write_text("".join(f"{item['sha256']}  {item['file']}\n" for item in records))
-    (args.output / "INSTALL.md").write_text(
-        f"# M5Chord {args.version}\n\n"
-        "One binary for Cardputer 1.0, 1.1 and ADV. See README.md for full instructions.\n\n"
-        "Known SMK-37 Bluetooth bug: the keyboard may appear connected without key input. "
-        "Switch the SMK-37 off and back on twice while M5Chord stays running. "
-        "See README and release notes for this version's candidate-fix and hardware-acceptance status.\n\n"
-        "## Fresh install / M5Burner upload candidate\n\n"
-        f"Write {factory.name} at 0x0000 on an ESP32-S3 with 8 MB flash. "
-        "This resets saved NVS settings and the active OTA selection. Back up settings first. "
-        "It does not erase the SD card and is not a whole-chip wipe. "
-        "The image is merged from build outputs, not dumped from a user's device.\n\n"
-        "## Application update\n\n"
-        f"Write {application.name} at 0x10000 only on this project's matching "
-        "default_8MB partition layout with app0 selected. NVS is not overwritten. "
-        "For source-based updates, prefer pio run -e cardputer-universal -t upload.\n\n"
-        "For a settings-preserving binary update, use all four separate components "
-        "with the exact command in README.md. This selects app0 without writing NVS.\n\n"
-        "## First boot\n\n"
-        "Release G0 and power-cycle. Geek view (V) should show 1.0/1.1 or ADV. "
-        "Test Tab Options and Q/W/E/R plus A/S/D/F press/release. "
-        "An empty settings store starts in CHORD and Keyboard view. Saved modes are retained, and view changes persist after the idle save. "
-        "The controller produces no audio; use Unit MIDI in SEPARATE mode for DIN output. "
-        "SMK-37 can use BLE MIDI. External USB hubs remain unsupported.\n\n"
-        "## SD upgrade\n\n"
-        "With power off, rename the old /midi-brain folder to /M5Chord, keeping its contents. "
-        "There is no automatic migration. Leave /midi unchanged; it holds playback files. "
-        "New cards get the app-data folders automatically. Keep SD inserted during file playback. "
-        "Tab > MIDI Player > Load selects a file; wait for READY and press Play.\n\n"
-        "M5Burner account publication and catalog validation have not been performed. "
-        "manifest.json is release metadata, not an M5Burner import manifest. "
-        "See docs/COMPATIBILITY.md and docs/SMK37_TEST_RESULTS.md. "
-        "The release contains no private device settings.\n"
-    )
     archive = args.output / f"{prefix}.zip"
     with zipfile.ZipFile(archive, "x", compression=zipfile.ZIP_DEFLATED) as bundle:
         for path in sorted(args.output.rglob("*")):

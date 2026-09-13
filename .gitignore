@@ -13,3 +13,11 @@ build-*/
 .env
 .env.*
 .local/
+/AGENTS.md
+/Cardputer_ADV_Harmonic_MIDI_Brain_Codex_Spec_v2.md
+/IMPLEMENTATION_PLAN.md
+/CMakeLists.txt
+/docs/
+/test/
+/tools/*
+!/tools/package_firmware.py
