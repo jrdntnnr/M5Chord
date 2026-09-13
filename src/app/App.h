@@ -8,6 +8,7 @@
 #include "engine/ScaleEngine.h"
 #include "engine/VoicingEngine.h"
 #include "engine/MidiLooper.h"
+#include "engine/MidiFilePlayer.h"
 #include "midi/ActiveNoteRegistry.h"
 #include "midi/MidiEvent.h"
 #include "midi/MidiOutputActivity.h"
@@ -38,6 +39,9 @@ public:
     MidiLooper& looper();
     const MidiLooper& looper() const;
     void stopLoop(uint64_t nowUs);
+    MidiFilePlayer& midiFile() { return midi_file_; }
+    const MidiFilePlayer& midiFile() const { return midi_file_; }
+    void stopMidiFile(uint64_t nowUs);
     bool keyLearning() const;
     bool captureKeySelection(const MidiEvent& event);
     bool idle() const;
@@ -98,6 +102,7 @@ private:
     std::array<uint64_t, 4> tap_times_{};
     uint8_t tap_count_{0};
     MidiLooper looper_{};
+    MidiFilePlayer midi_file_{};
     bool playback_dispatch_{false};
     bool key_learning_{false};
     uint8_t learned_key_channel_{0};

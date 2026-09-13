@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(M5Chord VERSION 1.0 LANGUAGES CXX)
+project(M5Chord VERSION 1.1.0 LANGUAGES CXX)
 
 set(MIDIBRAIN_LIBDEPS "${CMAKE_SOURCE_DIR}/.pio/libdeps/cardputer-universal")
 if(NOT EXISTS "${MIDIBRAIN_LIBDEPS}/ArduinoJson/src/ArduinoJson.h")
@@ -23,6 +23,9 @@ add_library(midi_brain_core
     src/engine/ChordEngine.cpp
     src/engine/PerformanceEngine.cpp
     src/engine/MidiLooper.cpp
+    src/engine/MidiFilePlayer.cpp
+    src/midi/StandardMidiFile.cpp
+    src/storage/MidiFileStore.cpp
     src/engine/ScaleEngine.cpp
     src/engine/VoicingEngine.cpp
     src/midi/ActiveNoteRegistry.cpp
@@ -65,12 +68,18 @@ add_executable(midi_brain_tests
     test/test_key_extensions.cpp
     test/test_live_keyboard.cpp
     test/test_compatibility.cpp
+    test/test_connections_help.cpp
+    test/test_midi_file.cpp
 )
 
-target_link_libraries(midi_brain_tests PRIVATE midi_brain_core)
+find_package(Threads REQUIRED)
+target_link_libraries(midi_brain_tests PRIVATE midi_brain_core Threads::Threads)
 target_compile_options(midi_brain_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
 enable_testing()
+add_executable(midi_file_check tools/check_midi_file.cpp)
+target_link_libraries(midi_file_check PRIVATE midi_brain_core)
+target_compile_options(midi_file_check PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME midi_brain_tests COMMAND midi_brain_tests)
 
 option(MIDIBRAIN_BUILD_UI_PREVIEW "Build the native framebuffer preview" OFF)

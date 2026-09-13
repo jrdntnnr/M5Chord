@@ -10,6 +10,7 @@ namespace midibrain {
 
 class ProfileStore {
 public:
+    ProfileStore();
     bool begin();
     bool loadActive(ControllerMapper& mapper);
     bool saveSmk37(const FixedList<ControllerMapping, PadLearner::MappingCount>& mappings);
@@ -29,7 +30,7 @@ private:
     std::array<std::array<char, 96>, 32> paths_{};
     std::size_t count_{0};
     std::size_t selected_{0};
-    char active_path_[96]{"/midi-brain/controllers/smk37.json"};
+    char active_path_[96]{};
     bool available_{false};
     const char* error_{"SD absent"};
 };

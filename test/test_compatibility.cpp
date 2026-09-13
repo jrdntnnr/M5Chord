@@ -14,7 +14,7 @@ void capture(void* context, const ActionEvent& action, uint64_t) {
 
 void testCompatibility() {
     EXPECT(std::strcmp(AppName, "M5Chord") == 0);
-    EXPECT(std::strcmp(AppVersion, "1.0") == 0);
+    EXPECT(std::strcmp(AppVersion, "1.1.0") == 0);
     EXPECT(CardputerPins::SdClock == 40);
     EXPECT(CardputerPins::SdMiso == 39);
     EXPECT(CardputerPins::SdMosi == 14);

@@ -68,22 +68,33 @@ def file_record(path, offset):
             "sha256": hashlib.sha256(data).hexdigest()}
 
 
+def app_version(text):
+    match = re.search(r'AppVersion\[\]\s*=\s*"([^"]+)"', text)
+    if not match or not re.fullmatch(r"[0-9]+\.[0-9]+(?:\.[0-9]+)?(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?", match[1]):
+        raise ValueError("Invalid application version")
+    return match[1]
+
+
 def main():
     root = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description="Package the universal Cardputer build without reading a device")
     parser.add_argument("--build-dir", type=Path, default=root / ".pio/build/cardputer-universal")
     parser.add_argument("--core-dir", type=Path, default=root / ".pio")
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--version", required=True)
+    parser.add_argument("--version")
     args = parser.parse_args()
-    if not re.fullmatch(r"[0-9]+\.[0-9]+(?:\.[0-9]+)?", args.version):
-        parser.error("Version must be numeric, for example 1.0")
     app_info = (root / "src/common/AppInfo.h").read_text()
-    if f'AppVersion[] = "{args.version}"' not in app_info:
+    version = app_version(app_info)
+    if args.version is not None and args.version != version:
         parser.error("Package version must match src/common/AppInfo.h")
+    args.version = version
     commit = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], check=True,
                             capture_output=True, text=True).stdout.strip()
     subprocess.run(["git", "-C", str(root), "diff", "--quiet", "HEAD", "--"], check=True)
+    untracked = subprocess.run(["git", "-C", str(root), "ls-files", "--others", "--exclude-standard"],
+                               check=True, capture_output=True, text=True).stdout.strip()
+    if untracked:
+        parser.error("Commit or ignore untracked files before packaging")
     paths = {
         0: args.build_dir / "bootloader.bin",
         0x8000: args.build_dir / "partitions.bin",
@@ -91,6 +102,8 @@ def main():
         0x10000: args.build_dir / "firmware.bin",
     }
     segments = {offset: path.read_bytes() for offset, path in paths.items()}
+    if b"DIAGNOSTIC USB_HOST=OFF" in segments[0x10000]:
+        parser.error("Diagnostic firmware must not be packaged as a universal release")
     validate_segments(segments)
     esptool = args.core_dir / "packages/tool-esptoolpy/esptool.py"
     if not esptool.is_file():
@@ -126,7 +139,7 @@ def main():
         "chip": "esp32s3",
         "flash_bytes": FLASH_SIZE,
         "models": ["Cardputer 1.0", "Cardputer 1.1", "Cardputer ADV"],
-        "hardware_acceptance": "Pre-rename 1.0-device compatibility reported working; release-specific full acceptance pending; see docs/SMK37_TEST_RESULTS.md",
+        "hardware_acceptance": "User approved the preceding diagnostic build for 1.1.0; exhaustive per-revision and stable-image hardware checks remain pending; see docs/SMK37_TEST_RESULTS.md",
         "known_issues": ["SMK-37 BLE can connect without key input. Switch keyboard off/on twice; fix planned for a coming version."],
         "factory": {**file_record(factory, 0), "resets_nvs": True},
         "application": {**file_record(application, 0x10000), "requires_matching_partition_layout": True},
@@ -142,7 +155,7 @@ def main():
         "One binary for Cardputer 1.0, 1.1 and ADV. See README.md for full instructions.\n\n"
         "Known SMK-37 Bluetooth bug: the keyboard may appear connected without key input. "
         "Switch the SMK-37 off and back on twice while M5Chord stays running. "
-        "A fix is planned for a coming version; it is not included here.\n\n"
+        "See README and release notes for this version's candidate-fix and hardware-acceptance status.\n\n"
         "## Fresh install / M5Burner upload candidate\n\n"
         f"Write {factory.name} at 0x0000 on an ESP32-S3 with 8 MB flash. "
         "This resets saved NVS settings and the active OTA selection. Back up settings first. "
@@ -157,9 +170,14 @@ def main():
         "## First boot\n\n"
         "Release G0 and power-cycle. Geek view (V) should show 1.0/1.1 or ADV. "
         "Test Tab Options and Q/W/E/R plus A/S/D/F press/release. "
-        "On an empty settings store the initial mode is BYPASS. "
+        "An empty settings store starts in CHORD and Keyboard view. Saved modes are retained, and view changes persist after the idle save. "
         "The controller produces no audio; use Unit MIDI in SEPARATE mode for DIN output. "
         "SMK-37 can use BLE MIDI. External USB hubs remain unsupported.\n\n"
+        "## SD upgrade\n\n"
+        "With power off, rename the old /midi-brain folder to /M5Chord, keeping its contents. "
+        "There is no automatic migration. Leave /midi unchanged; it holds playback files. "
+        "New cards get the app-data folders automatically. Keep SD inserted during file playback. "
+        "Tab > MIDI Player > Load selects a file; wait for READY and press Play.\n\n"
         "M5Burner account publication and catalog validation have not been performed. "
         "manifest.json is release metadata, not an M5Burner import manifest. "
         "See docs/COMPATIBILITY.md and docs/SMK37_TEST_RESULTS.md. "

@@ -11,6 +11,7 @@ DinMidiSink::DinMidiSink(HardwareSerial& serial) : serial_(&serial) {}
 
 bool DinMidiSink::begin() {
 #ifdef ARDUINO
+    serial_->setRxBufferSize(1024);
     serial_->begin(31250, SERIAL_8N1, CardputerPins::MidiRx, CardputerPins::MidiTx);
     return true;
 #else

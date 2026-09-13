@@ -20,6 +20,8 @@ void testHarmonyDisplay();
 void testKeyExtensions();
 void testLiveKeyboard();
 void testCompatibility();
+void testConnectionsHelp();
+void testMidiFile();
 
 int main() {
     try {
@@ -42,6 +44,8 @@ int main() {
         testKeyExtensions();
         testLiveKeyboard();
         testCompatibility();
+        testConnectionsHelp();
+        testMidiFile();
         std::cout << "All tests passed\n";
         return 0;
     } catch (const std::exception& error) {

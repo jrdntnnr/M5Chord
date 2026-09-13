@@ -7,18 +7,12 @@
 #include "transport/UsbMidiSource.h"
 #include "ui/HarmonyDisplay.h"
 #include "ui/LiveKeyboard.h"
+#include "common/DisplayView.h"
 
 #include <cstdint>
 #include <cstddef>
 
 namespace midibrain {
-
-enum class DisplayView : uint8_t {
-    Chord,
-    Notes,
-    Keyboard,
-    Geek
-};
 
 class Ui {
 public:
@@ -27,6 +21,8 @@ public:
     void update(uint64_t nowUs, const App& app, const UsbMidiSource& usb, const BleMidiSource& ble, const ProfileStore& profiles, const InputKeys& input);
     void showOverlay(const char* text, uint64_t nowUs);
     void nextView();
+    DisplayView view() const { return view_; }
+    void setView(DisplayView view) { view_ = storedDisplayView(static_cast<uint8_t>(view)); }
 #ifdef MIDIBRAIN_UI_PREVIEW
     bool savePreview(const char* path) const;
 #endif
@@ -41,8 +37,10 @@ private:
     void drawIndicators(const UsbMidiSource& usb, const BleMidiSource& ble, const ProfileStore& profiles);
     void drawPads();
     void drawOptions(const InputKeys& input, uint64_t nowUs);
+    void drawHelp(const InputKeys& input);
+    void drawMidiPlayer(const App& app, const InputKeys& input, uint64_t nowUs);
 
-    DisplayView view_{DisplayView::Chord};
+    DisplayView view_{DisplayView::Keyboard};
     HarmonyDisplay harmony_{};
     LiveKeyboard keyboard_{};
     const char* overlay_{nullptr};

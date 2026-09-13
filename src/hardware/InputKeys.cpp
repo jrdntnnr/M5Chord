@@ -26,12 +26,19 @@ constexpr MenuCommand commands[]{
     {"Save loop",SemanticAction::LoopSave},
     {"Load loop",SemanticAction::LoopLoad},
     {"Export diagnostics",SemanticAction::DiagnosticsExport},
-    {"Edit mapping",SemanticAction::MappingEdit}
+    {"Edit mapping",SemanticAction::MappingEdit},
+    {"Help / shortcuts",SemanticAction::HelpToggle},
+    {"BLE reconnect",SemanticAction::BleReconnect},
+    {"MIDI Player",SemanticAction::MidiFilePanel}
 };
 constexpr std::size_t rows = std::size(parameters) + std::size(commands);
 }
 InputKeys::InputKeys(App& app, ControllerMapper& mapper, ProfileStore& profiles, ActionCallback callback, void* context)
     : app_(app), mapper_(mapper), profiles_(profiles), callback_(callback), context_(context) {}
+void InputKeys::selectMidiPlayback() {
+    browsing_files_ = false; menu_ = true; player_page_ = true; help_ = false; editing_ = false;
+    player_button_ = app_.midiFile().file().valid() ? 1 : 0;
+}
 void InputKeys::dispatch(SemanticAction action, uint64_t nowUs, int16_t value, bool pressed) {
     if (callback_) callback_(context_,{action,value,pressed},nowUs);
 }
@@ -56,7 +63,7 @@ void InputKeys::poll(uint64_t nowUs) {
     keys[13] = state.enter;
     keys[8] = state.del;
     const uint8_t modifiers = (state.fn ? 1 : 0) | (state.shift ? 2 : 0) | (state.ctrl ? 4 : 0) | (state.alt || state.opt ? 8 : 0);
-    keyboard_.update(keys,modifiers,menu_ || learning(),nowUs,callback_,context_);
+    keyboard_.update(keys,modifiers,menuOpen() || learning(),nowUs,callback_,context_);
 #else
     static_cast<void>(nowUs);
 #endif
@@ -64,6 +71,49 @@ void InputKeys::poll(uint64_t nowUs) {
 bool InputKeys::handleAction(const ActionEvent& event, uint64_t nowUs) {
     const auto action = event.action;
     if (!event.pressed) return false;
+    if (action == SemanticAction::MidiFilePanel) { selectMidiPlayback(); return true; }
+    if (browsing_files_) {
+        if (action == SemanticAction::HelpToggle || action == SemanticAction::MenuBack || action == SemanticAction::OptionsToggle) {
+            browsing_files_ = false; player_page_ = true; menu_ = action != SemanticAction::OptionsToggle; return true;
+        }
+        if (action == SemanticAction::MenuUp || action == SemanticAction::MenuDown || action == SemanticAction::MenuDecrease || action == SemanticAction::MenuIncrease) {
+            const auto count = files_.names.size();
+            if (count) file_index_ = (file_index_ + ((action == SemanticAction::MenuUp || action == SemanticAction::MenuDecrease) ? count - 1 : 1)) % count;
+            return true;
+        }
+        if (action == SemanticAction::MenuConfirm) {
+            if (!files_.names.empty()) { browsing_files_ = false; dispatch(SemanticAction::MidiFileLoad, nowUs, file_index_); }
+            return true;
+        }
+    }
+    if (playerOpen()) {
+        if (action == SemanticAction::HelpToggle || action == SemanticAction::MenuBack || action == SemanticAction::OptionsToggle) {
+            player_page_ = false; menu_ = action != SemanticAction::OptionsToggle; return true;
+        }
+        if (action == SemanticAction::MenuUp || action == SemanticAction::MenuDown || action == SemanticAction::MenuDecrease || action == SemanticAction::MenuIncrease) {
+            player_button_ ^= 1; return true;
+        }
+        if (action == SemanticAction::MenuConfirm) {
+            if (!file_loading_) dispatch(player_button_ == 0 ? SemanticAction::MidiFileBrowse : SemanticAction::MidiFilePlay, nowUs);
+            return true;
+        }
+    }
+    if (action == SemanticAction::HelpToggle) {
+        if (learning() || editing_) {
+            learner_.cancel(); generic_learn_ = false; pending_pads_ = false; editing_ = false; menu_ = false;
+        } else { help_ = !help_; help_page_ = 0; }
+        return true;
+    }
+    if (help_) {
+        if (action == SemanticAction::MenuUp || action == SemanticAction::MenuDecrease)
+            help_page_ = (help_page_ + HelpPages - 1) % HelpPages;
+        else if (action == SemanticAction::MenuDown || action == SemanticAction::MenuIncrease || action == SemanticAction::MenuConfirm)
+            help_page_ = (help_page_ + 1) % HelpPages;
+        else if (action == SemanticAction::OptionsToggle) { help_ = false; menu_ = !menu_; }
+        else if (action == SemanticAction::MenuBack) help_ = false;
+        else return false;
+        return true;
+    }
     if (action == SemanticAction::PadSetup) { beginPadSetup(nowUs); return true; }
     if (action == SemanticAction::OptionsToggle || action == SemanticAction::MenuBack) {
         if (learning()) { learner_.cancel(); generic_learn_ = false; }
@@ -209,16 +259,19 @@ bool InputKeys::learning() const { return learner_.active() || generic_learn_ ||
 uint8_t InputKeys::learnStep() const { return learner_.step(); }
 const char* InputKeys::learnActionName() const { return generic_learn_ ? "MIDI LEARN" : ControllerMapper::actionName(learner_.currentAction()); }
 const char* InputKeys::learnStatus() const { return learn_status_; }
-bool InputKeys::menuOpen() const { return menu_; }
+bool InputKeys::menuOpen() const { return menu_ || help_; }
 const char* InputKeys::status() const { return status_; }
-std::size_t InputKeys::menuIndex() const { return editing_ ? edit_field_ : selected_; }
-std::size_t InputKeys::menuCount() const { return editing_ ? 5 : rows; }
+std::size_t InputKeys::menuIndex() const { return browsing_files_ ? file_index_ : editing_ ? edit_field_ : selected_; }
+std::size_t InputKeys::menuCount() const { return browsing_files_ ? std::max<std::size_t>(1, files_.names.size()) : editing_ ? 5 : rows; }
 const char* InputKeys::menuNeighbor(int direction) const {
     if (editing_) return direction < 0 ? "Edit MIDI mapping" : "Finish on Save mapping";
     const auto row = (selected_ + rows + direction) % rows;
     return row < std::size(parameters) ? parameters[row].label : commands[row - std::size(parameters)].name;
 }
 const char* InputKeys::menuHelp() const {
+    if (browsing_files_) return files_.truncated ? "List limited; Enter loads; Esc back" : "Enter loads; Esc back; files in /midi";
+    if (selected_ >= std::size(parameters) && commands[selected_ - std::size(parameters)].action == SemanticAction::MidiFilePlay)
+        return app_.midiFile().name()[0] ? app_.midiFile().name() : "Load a file from /midi first";
     if (editing_) return edit_field_ == 4 ? "Enter saves; Tab cancels" : "Choose how this control behaves";
     if (selected_ >= std::size(parameters)) return "Enter runs this command";
     switch (selected_) {
@@ -241,7 +294,9 @@ const char* InputKeys::menuHelp() const {
         case 10: return "Note spacing relative to BPM";
         case 11: return "Length of each arp or pattern note";
         case 15: return "Send MIDI clock to the receiver";
-        case 16: return "Main output; Ambient Zero layers 1-4";
+        case 16: return "Main MIDI output channel 1-16";
+        case 33: return "AUTO locks to first active input";
+        case 34: return "L cycles channels 1 through this value";
         case 27: return "Recording length; FREE ends on press";
         case 29: return "Destination for preset and loop files";
         case 30: return app_.state().mode == EngineMode::Key ? "KEY already builds scale-based triads" : "Fit chord tones to the selected scale";
@@ -250,6 +305,11 @@ const char* InputKeys::menuHelp() const {
     return "Changes apply as you adjust";
 }
 void InputKeys::menuText(char* title, std::size_t titleSize, char* value, std::size_t valueSize) const {
+    if (browsing_files_) {
+        std::snprintf(title, titleSize, "LOAD MIDI /midi");
+        std::snprintf(value, valueSize, "%s", files_.names.empty() ? "NO MIDI FILES" : files_.names[file_index_].data());
+        return;
+    }
     if (editing_) {
         const char* labels[]{"Action","Trigger","Relative encoding","Consume MIDI","Save mapping"};
         const char* triggers[]{"PRESS","RELEASE","PRESS+RELEASE","TOGGLE","VALUE","RELATIVE"};
@@ -266,6 +326,8 @@ void InputKeys::menuText(char* title, std::size_t titleSize, char* value, std::s
         if ((command.action == SemanticAction::MappingDelete || command.action == SemanticAction::MappingEdit) && mapper_.size()) {
             const auto& m = mapper_.mapping(mapping_index_);
             std::snprintf(value,valueSize,"%u Ch%d #%d %s",static_cast<unsigned>(mapping_index_+1),m.source.channel+1,m.source.number,ControllerMapper::actionName(m.action));
+        } else if (command.action == SemanticAction::MidiFilePlay) {
+            std::snprintf(value, valueSize, "%s / %u CH", app_.midiFile().status(), app_.state().lane_count);
         } else std::snprintf(value,valueSize,"%s",command.action == SemanticAction::ProfileNext ? profiles_.name() : "ENTER");
     }
 }

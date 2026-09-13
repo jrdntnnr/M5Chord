@@ -11,6 +11,7 @@ void formatParameter(std::size_t index, const AppState& state, char* output, std
     const char* dirs[]{"UP", "DOWN", "UP/DOWN", "RANDOM"};
     const char* bass[]{"OFF", "ROOT", "LOWEST", "UNISON"};
     const char* expression[]{"SOURCE", "GENERATED", "OFF"};
+    const char* inputs[]{"AUTO", "BLE", "USB", "DIN"};
     if (index == 0) label = modeName(state.mode);
     else if (index == 1) label = styles[value];
     else if (index == 2) label = value ? "STACK" : "MOMENTARY";
@@ -25,6 +26,7 @@ void formatParameter(std::size_t index, const AppState& state, char* output, std
     else if (index == 27 && !value) label = "FREE";
     else if (index == 28) label = value ? rates[value - 1] : "OFF";
     else if (index == 32) label = value ? "SOURCE VELOCITY" : "FIXED 100";
+    else if (index == 33) label = inputs[value];
     else if (index == 15 || (index >= 19 && index <= 21) || index == 30) label = value ? "ON" : "OFF";
     if (label) std::snprintf(output, size, "%s", label);
     else std::snprintf(output, size, "%d", value);

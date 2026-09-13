@@ -25,7 +25,22 @@ bool App::keyLearning() const { return key_learning_; }
 uint64_t App::lastActivity() const { return last_activity_us_; }
 bool App::idle() const {
     for (const auto& voice : voices_) if (voice.active) return false;
-    return looper_.mode() == LoopMode::Stopped && scheduler_.empty();
+    return !midi_file_.playing() && looper_.mode() == LoopMode::Stopped && scheduler_.empty();
+}
+
+void App::stopMidiFile(uint64_t nowUs) {
+    const bool wasPlaying = midi_file_.playing();
+    midi_file_.stop();
+    scheduler_.cancel(StreamId::File);
+    const bool wasPlayback = playback_dispatch_;
+    playback_dispatch_ = true;
+    sendReleased(active_notes_.release(StreamId::File), nowUs);
+    if (wasPlaying) for (uint8_t channel = 0; channel < midi_file_.usedChannels(); ++channel) {
+        send(MidiEvent::cc(channel, 64, 0, nowUs));
+        send(MidiEvent::cc(channel, 66, 0, nowUs));
+        send(MidiEvent::cc(channel, 69, 0, nowUs));
+    }
+    playback_dispatch_ = wasPlayback;
 }
 
 void App::stopLoop(uint64_t nowUs) {
@@ -107,7 +122,8 @@ App::SourceVoice* App::allocateVoice(const MidiEvent& event) {
         if (!voice.active) {
             voice = {};
             voice.active = true;
-            voice.id = {event.channel, event.data1, ++generation_};
+            generation_ = generation_ == 0x3FFFFFFFU ? 1 : generation_ + 1;
+            voice.id = {event.channel, event.data1, generation_};
             voice.velocity = event.data2;
             return &voice;
         }
@@ -244,6 +260,7 @@ void App::dispatch(const ScheduledMidiEvent& scheduled) {
 void App::tick(uint64_t nowUs) {
     nowUs = std::max(nowUs,last_tick_us_);
     last_tick_us_ = nowUs;
+    if (!midi_file_.tick(nowUs, scheduler_)) { ++state_.stats.midi_events_dropped; stopMidiFile(nowUs); }
     if (looper_.tick(nowUs, scheduler_)) {
         playback_dispatch_ = true;
         sendReleased(active_notes_.release(StreamId::Loop), nowUs);
@@ -276,10 +293,11 @@ void App::tick(uint64_t nowUs) {
     }
     ScheduledMidiEvent event;
     while (scheduler_.popDue(nowUs, event)) {
-        playback_dispatch_ = event.stream == StreamId::Loop;
+        playback_dispatch_ = event.stream == StreamId::Loop || event.stream == StreamId::File;
         dispatch(event);
         playback_dispatch_ = false;
     }
+    if (midi_file_.finished(nowUs)) stopMidiFile(nowUs);
 }
 
 void App::routeExpression(const MidiEvent& event) {
@@ -440,6 +458,13 @@ void App::apply(const ActionEvent& action, uint64_t nowUs) {
         case SemanticAction::PerformanceDirectionNext: state_.performance.direction = static_cast<Direction>((static_cast<uint8_t>(state_.performance.direction) + 4 + direction) % 4); rebuild = true; break;
         case SemanticAction::StrumIntervalSet: state_.performance.strum_interval_ms = std::clamp<int>(action.value, 2, 120); break;
         case SemanticAction::PerformanceChannelSet: changeRouting(state_.routing.performance_channel, action.value, nowUs); state_.routing.primary_channel_override = true; break;
+        case SemanticAction::InputPortNext: panic(nowUs); state_.input_port = (state_.input_port + 4 + direction) % 4; break;
+        case SemanticAction::LaneCountSet: stopMidiFile(nowUs); state_.lane_count = std::clamp<int>(action.value, 1, 16); break;
+        case SemanticAction::MidiFilePlay:
+            if (midi_file_.playing()) stopMidiFile(nowUs);
+            else { panic(nowUs); midi_file_.play(nowUs, state_.lane_count); }
+            break;
+        case SemanticAction::MidiFileStop: stopMidiFile(nowUs); break;
         case SemanticAction::BassChannelSet: changeRouting(state_.routing.bass_channel, action.value, nowUs); break;
         case SemanticAction::RawChannelSet: changeRouting(state_.routing.raw_chord_channel, action.value, nowUs); break;
         case SemanticAction::ExpressionNext: panic(nowUs); state_.routing.expression_routing = static_cast<ExpressionRouting>((static_cast<uint8_t>(state_.routing.expression_routing) + 3 + direction) % 3); break;
@@ -447,6 +472,7 @@ void App::apply(const ActionEvent& action, uint64_t nowUs) {
         case SemanticAction::InputLowSet: panic(nowUs); state_.root_input_low = std::clamp<int>(action.value, 0, state_.root_input_high); break;
         case SemanticAction::InputHighSet: panic(nowUs); state_.root_input_high = std::clamp<int>(action.value, state_.root_input_low, 127); break;
         case SemanticAction::LoopRecord:
+            stopMidiFile(nowUs);
             if (looper_.mode() == LoopMode::Recording) looper_.play(nowUs);
             else {
                 stopLoop(nowUs);
@@ -455,12 +481,13 @@ void App::apply(const ActionEvent& action, uint64_t nowUs) {
             }
             break;
         case SemanticAction::LoopPlay:
+            stopMidiFile(nowUs);
             if (looper_.mode() == LoopMode::Playing || looper_.mode() == LoopMode::Overdub) stopLoop(nowUs);
             else looper_.play(nowUs);
             break;
         case SemanticAction::LoopStop: stopLoop(nowUs); break;
         case SemanticAction::LoopClear: stopLoop(nowUs); looper_.clear(); break;
-        case SemanticAction::LoopOverdub: looper_.overdub(nowUs); break;
+        case SemanticAction::LoopOverdub: stopMidiFile(nowUs); looper_.overdub(nowUs); break;
         case SemanticAction::LoopUndo: stopLoop(nowUs); looper_.undo(nowUs); break;
         case SemanticAction::LoopLengthNext: state_.loop_bars = direction > 0 ? (state_.loop_bars == 0 ? 1 : state_.loop_bars == 16 ? 0 : state_.loop_bars * 2) : (state_.loop_bars == 0 ? 16 : state_.loop_bars == 1 ? 0 : state_.loop_bars / 2); break;
         case SemanticAction::LoopQuantizeNext: state_.loop_quantize = (state_.loop_quantize + 7 + direction) % 7; break;
@@ -519,7 +546,7 @@ void App::apply(const ActionEvent& action, uint64_t nowUs) {
         case SemanticAction::OutputLaneNext:
             if (action.pressed) {
                 panic(nowUs);
-                state_.routing.performance_channel = static_cast<uint8_t>((state_.routing.performance_channel + 1) % 4);
+                state_.routing.performance_channel = static_cast<uint8_t>((state_.routing.performance_channel + 1) % state_.lane_count);
                 state_.routing.primary_channel_override = true;
             }
             break;
@@ -531,6 +558,7 @@ void App::apply(const ActionEvent& action, uint64_t nowUs) {
 }
 
 void App::panic(uint64_t nowUs) {
+    stopMidiFile(nowUs);
     last_chord_.clear();
     looper_.stop(nowUs);
     quality_held_ = 0;

@@ -45,7 +45,7 @@ inline constexpr KeyBinding keyBindings[]{
     {44, 0, SemanticAction::MenuDecrease, false, true},
     {47, 0, SemanticAction::MenuIncrease, false, true},
     {13, 0, SemanticAction::MenuConfirm, false, true},
-    {96, 0, SemanticAction::MenuBack, false, true},
+    {96, 0, SemanticAction::HelpToggle, false, false},
 };
 
 constexpr bool keyBindingsUnique() {
@@ -69,7 +69,7 @@ public:
         for (const auto& binding : keyBindings) {
             if (!keys[binding.key] || previous_[binding.key] || binding.modifiers != modifiers) continue;
             if (binding.menu && !menu) continue;
-            if (menu && !binding.menu && binding.action != SemanticAction::Panic && binding.action != SemanticAction::OptionsToggle) continue;
+            if (menu && !binding.menu && binding.action != SemanticAction::Panic && binding.action != SemanticAction::OptionsToggle && binding.action != SemanticAction::HelpToggle) continue;
             if (binding.release) held_[binding.key] = binding.action;
             if (callback) callback(context, {binding.action, 1, true, binding.key}, nowUs);
         }

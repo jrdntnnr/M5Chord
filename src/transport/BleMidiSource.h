@@ -3,6 +3,8 @@
 #include "midi/BleMidiDecoder.h"
 #include "transport/MidiSource.h"
 #include "transport/BleMidiSubscription.h"
+#include "transport/BleMidiTrace.h"
+#include "transport/BleMidiMtuGuard.h"
 
 #include <atomic>
 #include <cstddef>
@@ -37,6 +39,8 @@ struct BleMidiDiagnostics {
     uint32_t events_dropped{0};
     uint32_t errors{0};
     uint32_t subscription_attempts{0};
+    uint32_t trace_dropped{0};
+    bool midi_received{false};
     int32_t subscription_status{0};
     char product[65]{};
 };
@@ -49,6 +53,9 @@ public:
     BleMidiSource(MidiCallback midiCallback, ConnectionCallback connectionCallback, void* context);
     bool begin() override;
     void poll() override;
+    void poll(bool allowConnect);
+    void requestReconnect() { reconnect_requested_ = true; }
+    const BleMidiTrace& trace() const { return trace_; }
     bool connected() const override;
     bool scanning() const;
     const BleMidiDiagnostics& diagnostics() const;
@@ -77,6 +84,7 @@ private:
 
     static void scanComplete(BLEScanResults results);
     static void gattEvent(esp_gattc_cb_event_t event, esp_gatt_if_t interface, esp_ble_gattc_cb_param_t* parameter);
+    static void gapEvent(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* parameter);
     static void queueDecoded(void* context, const MidiEvent& event);
     void handleAdvertisement(BLEAdvertisedDevice& advertisedDevice);
     void startScan(uint64_t nowUs);
@@ -84,8 +92,10 @@ private:
     void handleDisconnect(uint64_t nowUs);
     void handleNotification(const uint8_t* data, std::size_t size);
     void pollSubscription(uint64_t nowUs);
+    void record(BleTraceEvent event, int32_t status = 0, uint16_t handle = 0, const uint8_t* data = nullptr, uint16_t size = 0);
 
     static BleMidiSource* instance_;
+    BleMidiMtuGuard mtu_guard_{};
     BLEScan* scan_{nullptr};
     BLEClient* client_{nullptr};
     BleMidiSubscription subscription_{};
@@ -96,6 +106,9 @@ private:
     std::atomic<esp_gatt_if_t> interface_{ESP_GATT_IF_NONE};
     std::atomic<int32_t> registration_result_{-1};
     std::atomic<int32_t> subscription_result_{-1};
+    std::atomic<int32_t> read_result_{-1};
+    std::atomic<int32_t> authentication_result_{-1};
+    std::atomic<uint32_t> rejected_notifications_{0};
     std::atomic<bool> data_seen_{false};
     AdvertisedCallbacks advertised_callbacks_{};
     ClientCallbacks client_callbacks_{};
@@ -105,6 +118,11 @@ private:
     QueueHandle_t event_queue_{nullptr};
     StaticQueue_t event_queue_storage_{};
     uint8_t event_queue_buffer_[sizeof(MidiEvent) * 32]{};
+    QueueHandle_t trace_queue_{nullptr};
+    StaticQueue_t trace_queue_storage_{};
+    uint8_t trace_queue_buffer_[sizeof(BleTraceRecord) * 32]{};
+    std::atomic<uint32_t> trace_dropped_{0};
+    std::atomic<uint32_t> session_notifications_{0};
     std::atomic<bool> scan_complete_{false};
     std::atomic<bool> disconnect_pending_{false};
     std::atomic<bool> overflow_pending_{false};
@@ -119,6 +137,8 @@ private:
     BleMidiDecoder decoder_{};
     BleMidiDiagnostics diagnostics_{};
     bool connected_{false};
+    bool reconnect_requested_{false};
+    BleMidiTrace trace_{};
 };
 
 }

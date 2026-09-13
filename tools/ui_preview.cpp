@@ -28,6 +28,7 @@ int main(int argc, char** argv) {
     UsbMidiSource usb(nullptr, nullptr, nullptr);
     BleMidiSource ble(nullptr, nullptr, nullptr);
     Ui ui;
+    ui.setView(DisplayView::Chord);
     ui.begin();
     ui.showBootStatus("MIDI OUTPUT");
     char bootPath[512]{};
@@ -43,6 +44,16 @@ int main(int argc, char** argv) {
         success = ui.savePreview(path) && success;
     };
     capture("01-bypass");
+    input.openFiles();
+    capture("file-browser-empty");
+    input.fileCatalog().add("Ambient-Zero-four-layer-demo.mid");
+    input.fileCatalog().add("A-very-long-MIDI-file-name-for-the-two-line-browser-display.mid");
+    capture("file-browser-long");
+    input.handleAction({SemanticAction::MenuDown, 1, true}, now);
+    capture("file-browser-selected");
+    input.selectMidiPlayback();
+    capture("file-playback-empty");
+    input.handleAction({SemanticAction::OptionsToggle, 1, true}, now);
     app.state().mode = EngineMode::Key;
     capture("02-key-idle");
     app.apply({SemanticAction::ChordMin, 1, true, 119}, now + 1);
@@ -159,5 +170,53 @@ int main(int argc, char** argv) {
             success = ui.savePreview(path) && success;
         }
     }
+    input.handleAction({SemanticAction::HelpToggle, 1, true}, now + 1);
+    for (std::size_t page = 0; page < HelpPages; ++page) {
+        char name[32]{};
+        std::snprintf(name, sizeof(name), "help-%02u", static_cast<unsigned>(page));
+        capture(name);
+        input.handleAction({SemanticAction::MenuIncrease, 1, true}, now + 1);
+    }
+    input.handleAction({SemanticAction::HelpToggle, 1, true}, now + 1);
+    input.selectMidiPlayback();
+    capture("player-empty");
+    app.midiFile().setName("ghaetta.mid");
+    input.setFileLoading(true, 42);
+    capture("player-loading");
+    input.setFileLoading(false, 100);
+    app.midiFile().file().error = "SD TOO SLOW: STOPPED";
+    app.midiFile().stop();
+    capture("player-error");
+    app.midiFile().file().error = nullptr;
+    app.midiFile().file().channels = 31;
+    app.midiFile().file().duration_us = 368562748;
+    app.midiFile().stop(); input.selectMidiPlayback();
+    capture("player-ready");
+    app.midiFile().play(now, 4);
+    now += 60000000;
+    capture("player-playing");
+    app.midiFile().setName("A-very-long-MIDI-song-name-with-several-parts-and-versions.mid");
+    capture("player-long-name");
+    input.handleAction({SemanticAction::OptionsToggle, 1, true}, now + 1);
+    app.panic(now + 2);
+    app.state().mode = EngineMode::Chord;
+    app.state().harmonic.quality = ChordQuality::Major;
+    app.state().harmonic.extensions = ExtensionMajor7;
+    app.state().harmonic.extension_stack = true;
+    app.state().harmonic.play_style = PlayStyle::Free;
+    app.state().harmonic.scale = ScaleType::Major;
+    app.state().harmonic.key_root = 0;
+    app.state().harmonic.voicing_step = 0;
+    app.state().harmonic.harmonic_quantize = false;
+    app.state().performance.mode = PerformanceMode::Block;
+    app.state().performance.bpm = 100;
+    app.state().routing.performance_channel = 0;
+    app.state().bass.mode = BassMode::Off;
+    app.state().routing.raw_chord_enabled = false;
+    app.apply({SemanticAction::ChordMaj, 1, true}, now + 3);
+    app.receive(MidiEvent::noteOn(0, 60, 100, now + 3));
+    app.tick(now + 3);
+    ui.setView(DisplayView::Keyboard);
+    capture("M5Chord-keyboard");
     return success ? 0 : 1;
 }

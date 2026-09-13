@@ -21,7 +21,7 @@ inline constexpr Parameter parameters[]{
     {"Slop %", SemanticAction::PerformanceAmountSet, 0, 100, false},
     {"BPM", SemanticAction::TempoSet, 30, 300, false},
     {"Clock out", SemanticAction::ClockToggle, 0, 1, true},
-    {"Performance ch", SemanticAction::PerformanceChannelSet, 1, 16, false},
+    {"Output channel", SemanticAction::PerformanceChannelSet, 1, 16, false},
     {"Bass ch", SemanticAction::BassChannelSet, 1, 16, false},
     {"Raw chord ch", SemanticAction::RawChannelSet, 1, 16, false},
     {"Performance on", SemanticAction::StreamPerformanceToggle, 0, 1, true},
@@ -38,6 +38,8 @@ inline constexpr Parameter parameters[]{
     {"Harmonic quantize", SemanticAction::HarmonicQuantizeToggle, 0, 1, true},
     {"Bass octave", SemanticAction::BassOctaveUp, -2, 1, true},
     {"Velocity sense", SemanticAction::VelocityToggle, 0, 1, true},
+    {"MIDI input", SemanticAction::InputPortNext, 0, 3, true},
+    {"Layer channels", SemanticAction::LaneCountSet, 1, 16, false},
 };
 inline int parameterValue(std::size_t index, const AppState& s) {
     switch (index) {
@@ -74,6 +76,8 @@ inline int parameterValue(std::size_t index, const AppState& s) {
         case 30: return s.harmonic.harmonic_quantize;
         case 31: return s.bass.octave;
         case 32: return s.velocity_sensitive;
+        case 33: return s.input_port;
+        case 34: return s.lane_count;
         default: return 0;
     }
 }

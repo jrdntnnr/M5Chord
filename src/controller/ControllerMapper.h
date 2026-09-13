@@ -109,6 +109,15 @@ enum class SemanticAction : uint8_t {
     DiagnosticsExport,
     MappingEdit,
     VelocityToggle,
+    HelpToggle,
+    BleReconnect,
+    InputPortNext,
+    LaneCountSet,
+    MidiFileBrowse,
+    MidiFileLoad,
+    MidiFilePlay,
+    MidiFileStop,
+    MidiFilePanel,
     Count
 };
 

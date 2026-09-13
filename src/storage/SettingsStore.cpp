@@ -86,13 +86,15 @@ bool valid(const StoredSettings& stored) {
 }
 
 bool SettingsStore::load(AppState& state) {
+    state.mode = EngineMode::Chord;
 #ifdef ARDUINO
     Preferences preferences;
     if (!preferences.begin("midi-brain", true)) return false;
-    if (preferences.isKey("settings-v2")) {
+    const char* key = preferences.isKey("settings-v3") ? "settings-v3" : "settings-v2";
+    if (preferences.isKey(key)) {
         char buffer[2048]{};
-        const std::size_t length = preferences.getBytesLength("settings-v2");
-        if (!length || length > sizeof(buffer) || preferences.getBytes("settings-v2",buffer,length) != length) {
+        const std::size_t length = preferences.getBytesLength(key);
+        if (!length || length > sizeof(buffer) || preferences.getBytes(key,buffer,length) != length) {
             preferences.end();
             return false;
         }
@@ -149,7 +151,7 @@ bool SettingsStore::save(const AppState& state) {
     const std::size_t length = serializeJson(document,buffer,sizeof(buffer));
     Preferences preferences;
     if (!preferences.begin("midi-brain", false)) return false;
-    const bool written = preferences.putBytes("settings-v2", buffer, length) == length;
+    const bool written = preferences.putBytes("settings-v3", buffer, length) == length;
     preferences.end();
     return written;
 #else
@@ -160,6 +162,31 @@ bool SettingsStore::save(const AppState& state) {
 
 uint32_t SettingsStore::fingerprint(const AppState& state) const {
     return StateCodec::fingerprint(state);
+}
+
+DisplayView SettingsStore::loadView() const {
+#ifdef ARDUINO
+    Preferences preferences;
+    if (!preferences.begin("midi-brain", true)) return DisplayView::Keyboard;
+    const auto value = preferences.getUChar("display-view", static_cast<uint8_t>(DisplayView::Keyboard));
+    preferences.end();
+    return storedDisplayView(value);
+#else
+    return DisplayView::Keyboard;
+#endif
+}
+bool SettingsStore::saveView(DisplayView view) {
+    const auto value = static_cast<uint8_t>(view);
+    if (value >= 4) return false;
+#ifdef ARDUINO
+    Preferences preferences;
+    if (!preferences.begin("midi-brain", false)) return false;
+    const bool written = preferences.putUChar("display-view", value) == sizeof(value);
+    preferences.end();
+    return written;
+#else
+    return false;
+#endif
 }
 
 }

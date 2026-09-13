@@ -53,6 +53,8 @@ struct RuntimeStats {
     uint32_t midi_events_tx{0};
     uint32_t midi_events_dropped{0};
     uint32_t panic_count{0};
+    uint32_t din_events_rx{0};
+    uint32_t din_errors{0};
 };
 
 struct AppState {
@@ -70,6 +72,8 @@ struct AppState {
     uint8_t loop_quantize{0};
     uint8_t preset_slot{0};
     bool velocity_sensitive{true};
+    uint8_t input_port{0};
+    uint8_t lane_count{4};
 };
 
 const char* performanceName(PerformanceMode mode);

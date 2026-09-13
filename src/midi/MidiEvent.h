@@ -60,7 +60,8 @@ enum class StreamId : uint8_t {
     Bass,
     RawChord,
     Loop,
-    System
+    System,
+    File
 };
 
 struct OutputNote {
@@ -73,4 +74,3 @@ struct OutputNote {
 };
 
 }
-

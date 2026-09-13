@@ -1,5 +1,26 @@
 # Implementation plan
 
+## MIDI Player streaming and interface follow-up
+
+- [x] Replace device whole-file event loading with background validation and a fixed read-ahead queue; keep SD outside MIDI event processing.
+- [x] Consolidate Tab commands into one MIDI Player page with Load/Play/Stop, persistent errors, validation progress, elapsed/total time and used/available channels.
+- [x] Add native full-song/replay diagnostics and regression coverage for buffering, parser limits, cache boundaries, underrun/read-failure cleanup and navigation.
+- [x] Use CHORD and Keyboard view for fresh settings, preserve saved modes, and persist view choice separately without changing musical preset schemas.
+- [ ] Record physical full-song playback, responsive loading and slow/removed-card recovery on each supported Cardputer revision before release acceptance.
+
+## 1.1.0 development sequence
+
+- [x] Rename all SD app-data paths to `/M5Chord`, centralize path definitions and validate remembered profile paths. Keep `/midi` and internal settings unchanged; document manual SD folder rename, with no automatic migration.
+- [x] Generalize standard BLE-MIDI discovery, explicit AUTO/BLE/USB/DIN selection and Unit MIDI DIN decoding.
+- [x] Add persistent 1–16 layer-channel count (default four), schema-2 migration, and paged Esc/Tab shortcut help.
+- [x] Capture the SMK-37 startup failure and failed reconnect; record physical setup and successful keyboard-restart workaround.
+- [x] Implement the missing asynchronous initial MIDI characteristic read, bounded authentication retry, richer BLE trace and decoded-input indicator. Remove the unsuccessful silent subscription toggle.
+- [x] Add bounded portable SMF 0/1 PPQN decoding, tempo-map merge, channel selection/remapping and File-stream playback through the existing scheduler/registry.
+- [x] Add idle-only `/midi` SD loading and a Tab filename browser, play/stop commands and no new physical shortcuts.
+- [x] Document scope, limits, migration and all recent changes in README and draft 1.1.0 release notes; update version-aware packaging/CI.
+- [x] Complete final build/test/visual checks and flash the requested diagnostic candidate without erasing saved-settings storage; see the exact hash/setup in SMK37_TEST_RESULTS.md.
+- [ ] Complete individually recorded first-connection BLE, SD playback/channel limits, DIN input and persistence checks. The user approved the diagnostic build and authorized 1.1.0 publication with the remaining coverage and BLE issue documented.
+
 ## Completed software gates
 
 - [x] Build a universal 1.0/1.1/ADV candidate with runtime keyboard selection, shared safe pin definitions, same-count key-swap regressions and verified factory/application packages.

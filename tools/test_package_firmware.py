@@ -2,7 +2,7 @@ import hashlib
 import struct
 import unittest
 
-from package_firmware import EXPECTED_PARTITIONS, validate_partitions, validate_segments, verify_merged
+from package_firmware import EXPECTED_PARTITIONS, app_version, validate_partitions, validate_segments, verify_merged
 
 
 def table(partitions=None):
@@ -13,6 +13,13 @@ def table(partitions=None):
 
 
 class PackageTests(unittest.TestCase):
+    def test_versions(self):
+        for version in ("1.0", "1.1.0", "1.1.0-dev", "1.1.0-rc.1"):
+            self.assertEqual(app_version(f'AppVersion[] = "{version}";'), version)
+        for version in ("../escape", "1.1.0/evil", "1.1.0-", ""):
+            with self.assertRaises(ValueError):
+                app_version(f'AppVersion[] = "{version}";')
+
     def setUp(self):
         self.segments = {0: b"boot", 0x8000: table(), 0xE000: b"ota", 0x10000: b"app"}
         self.merged = bytearray(b"\xff" * 0x11000)

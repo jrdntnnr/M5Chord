@@ -1,19 +1,25 @@
 # M5Chord
 
+Version: **1.1.0**. Versioning uses `MAJOR.MINOR.PATCH`: new compatible features increase MINOR, fixes alone increase PATCH, and breaking changes increase MAJOR. The previous [1.0 release](https://github.com/jrdntnnr/M5Chord/releases/tag/v1.0) remains available.
+
+New in 1.1.0: standard BLE-MIDI discovery with read-handshake repair and readable logs, Unit MIDI DIN input, explicit input selection, seven shortcut-help pages, a saved layer-channel count, and SD MIDI-file playback. See the [1.1.0 release notes](docs/RELEASE_1.1.0.md). The BLE repair remains a candidate until repeated physical cold-start tests pass.
+
 M5Chord is a standalone harmonic MIDI controller for M5Stack Cardputer 1.0, 1.1 and ADV. Connect a USB-MIDI or Bluetooth MIDI keyboard, turn single notes into chords, add extensions, play arpeggios and strums, and send the result to your instruments over DIN MIDI.
 
 It produces **MIDI, not audio**. An M5Stack Unit MIDI in `SEPARATE` mode provides the DIN output. No computer is needed while playing.
 
-[Download M5Chord 1.0](https://github.com/jrdntnnr/M5Chord/releases/tag/v1.0) · [Report an issue](https://github.com/jrdntnnr/M5Chord/issues) · [Release notes](docs/RELEASE_1.0.md)
+[Download M5Chord 1.1.0](https://github.com/jrdntnnr/M5Chord/releases/tag/v1.1.0) · [Report an issue](https://github.com/jrdntnnr/M5Chord/issues) · [Release notes](docs/RELEASE_1.1.0.md)
 
-> **Known Bluetooth bug — SMK-37:** the keyboard can appear connected while its keys do not register. The current workaround is to switch the **SMK-37 off and back on twice** while M5Chord stays running, then check that MIDI receive counters increase. A fix is planned for a coming version; it is **not fixed in 1.0**. See [Bluetooth connection](#ble-midi-connection).
+> **Known Bluetooth bug — SMK-37:** the keyboard can appear connected while its keys do not register. The reported workaround is to switch the **SMK-37 off and back on twice** while M5Chord stays running. Development logs confirmed that reconnect alone and a subscription off/on toggle did not fix the tested failure. This release includes an initial MIDI characteristic read and a guarded first-connection MTU request; the startup fix is not yet physically verified. See [Bluetooth connection](#ble-midi-connection) and [BLE logging](#ble-logging).
 
 ## Contents
 
+- [SD MIDI-file playback](#sd-midi-file-playback)
 - [Hardware and wiring](#hardware)
-- [Install the 1.0 binary](#install-the-10-binary)
+- [Install the 1.1.0 binary](#install-the-110-binary)
 - [Quick start: chords and arp](#quick-start-chords-and-arp)
 - [USB connection](#first-connection) and [Bluetooth connection](#ble-midi-connection)
+- [DIN MIDI input](#din-midi-input) and [input selection](#input-selection)
 - [Every Cardputer key](#controls)
 - [Modes, playstyles and Options](#options-and-playstyles)
 - [Scales](#arabic-scale-options)
@@ -30,9 +36,9 @@ One universal binary selects the appropriate keyboard driver automatically. No r
 |---|---|---|
 | 1.0 | GPIO keyboard matrix | Compatibility build flashed and reported working by the user |
 | 1.1 | Same GPIO keyboard matrix | Supported by shared wiring/driver; physical test still pending |
-| ADV | TCA8418 keyboard | Earlier builds used on hardware; complete 1.0-release acceptance still pending |
+| ADV | TCA8418 keyboard | Latest diagnostic build approved by user; exhaustive release checks remain pending |
 
-The 1.0 release adds the M5Chord name/version to the working compatibility code. Do not interpret build success as exhaustive hardware validation. See [compatibility details](docs/COMPATIBILITY.md) and [recorded results](docs/SMK37_TEST_RESULTS.md). This project is independent of M5Stack and is not an official M5Stack product.
+Release 1.1.0 retains the shared compatibility code and adds the features described above. Do not interpret build success as exhaustive hardware validation. See [compatibility details](docs/COMPATIBILITY.md) and [recorded results](docs/SMK37_TEST_RESULTS.md). This project is independent of M5Stack and is not an official M5Stack product.
 
 ## Signal path
 
@@ -63,20 +69,44 @@ External MIDI device
 - DIN-MIDI receiver, synth, effects processor, or other instrument
 - Known-good USB data cable
 - Direct USB OTG data path; use a single-device USB 2.0 power injector if the controller requires external VBUS
-- Optional FAT32 microSD card for controller profiles, presets, loops, and diagnostics
+- Optional FAT32 microSD card for controller profiles, presets, loops, MIDI files and diagnostics
 
 The Grove connection is GND to GND, 5 V to 5 V, Cardputer GPIO2/TX to Unit UART_RX, and Cardputer GPIO1/RX to Unit UART_TX. The firmware configures UART2 for 31,250 baud, 8N1, RX GPIO1, and TX GPIO2.
 
-Use one input controller at a time. For the SMK-37, use Bluetooth MIDI with the workaround above. EasyPlay1 Plus has worked over direct USB when placed in its MIDI mode. Direct SMK-37 USB interoperability is not established. A powered USB hub does not solve this: external hubs are unsupported by the current USB host stack.
+USB MIDI input is intended for **low-powered, simple, class-compliant MIDI controllers connected directly**. EasyPlay1 Plus has worked this way in its MIDI mode. Compatibility also depends on the controller's USB descriptors and a proper data/OTG connection; low power consumption alone is not a guarantee. Higher-powered or more complex devices may not enumerate reliably. Direct SMK-37 USB interoperability remains unestablished. External USB hubs, including powered hubs, are unsupported; use BLE or DIN instead.
 
-## Install the 1.0 binary
+## SD folders
 
-Download and extract `M5Chord-v1.0.zip` from the [1.0 release](https://github.com/jrdntnnr/M5Chord/releases/tag/v1.0). It contains the universal image, separate update components, checksums, instructions and third-party notices.
+For a fresh installation, boot with a writable FAT32 microSD card. M5Chord creates **`/M5Chord`** and its `controllers`, `presets`, `loops` and `logs` subfolders automatically. No existing user's files are required. Controller mappings, presets, recorded loops and diagnostic exports use these folders.
+
+Playback files remain separate: copy `.mid`/`.midi` files into **`/midi`** at the SD root. MIDI Player → Load creates that folder if it does not exist.
+
+Upgrading from the old folder layout: with the device powered off and before running this updated firmware, manually rename **`midi-brain` → `M5Chord`**, keeping everything inside it. There is no automatic move or fallback to the old SD folder. If `/M5Chord` already exists, back up both folders before merging their contents; do not overwrite newer files blindly. A previously selected custom profile may need to be selected again under Tab → Select profile; the default pad profile remains `controllers/smk37.json`. Internal settings storage is unchanged, so the SD rename does not reset saved settings or Layer channels. Older firmware still expects `/midi-brain`; pair the folder rename with the updated firmware.
+
+## Input selection
+
+Tab → **MIDI input** selects AUTO, BLE, USB or DIN. AUTO locks to the first source delivering a channel MIDI message; timing-only traffic does not claim it. A disconnect/error from the selected BLE/USB source releases its notes; a disconnect from an unused source does not cut the active performance. Change MIDI input to choose another source; changing it panics active notes and resets the selection. The selection is saved.
+
+M5Chord deliberately uses one input source at a time. It is not a multi-controller merger: identical channel/note messages from two controllers must not release one another's notes. An ordinary DIN cable provides no connection-detection signal. If a DIN device sends MIDI Active Sensing, missing traffic for more than 300 ms triggers cleanup; otherwise use Fn + Esc if it is unplugged while a note is held.
+
+## DIN MIDI input
+
+Connect your keyboard's DIN OUT to the **Unit MIDI INPUT**, and the Unit OUTPUT to your receiver's MIDI IN. Keep the Unit switch at **SEPARATE** for transformed output; BYPASS physically connects input to output and bypasses the chord engine on that wire. Select Tab → MIDI input → DIN, then inspect Geek view's `DIN E` counter while playing.
+
+M5Chord reads the Unit's optoisolated input through Grove **UART_TX → Cardputer GPIO1/RX** at 31,250 baud, 8N1; GPIO2/TX still carries generated output. This is MIDI input through the Unit MIDI hardware, **not audio input and not a SAM2695 synthesizer API**. No synth setup or audio feature is added.
+
+The official [Unit MIDI schematic](https://m5stack-doc.oss-cn-shenzhen.aliyuncs.com/774/SCH_UnitMIDI_B04_sch_2024_07_08_15_41_29.pdf) shows the input optocoupler connected to Grove RX independently of the output switch. The product page's Separate-mode input wording is ambiguous; DIN reception and routing still require physical confirmation on the actual Unit revision. Do not loop the receiver's MIDI THRU/OUT back into this input.
+
+The parser handles running status, Note On velocity zero, channel messages, interleaved realtime and song position. SysEx/system-common messages outside the supported set are skipped safely. UART overflow/framing errors reset parsing and panic the selected source. It does not infer disconnection from a quiet keyboard that does not send Active Sensing.
+
+## Install the 1.1.0 binary
+
+Download and extract `M5Chord-v1.1.0.zip` from the [1.1.0 release](https://github.com/jrdntnnr/M5Chord/releases/tag/v1.1.0). It contains the universal image, separate update components, checksums, instructions and third-party notices.
 
 | File | Address | Purpose |
 |---|---|---|
-| `M5Chord-v1.0-universal.bin` | `0x0000` | Fresh installation on any supported Cardputer; resets internal settings |
-| `M5Chord-v1.0-app.bin` | `0x10000` | Application component; never flash this at zero |
+| `M5Chord-v1.1.0-universal.bin` | `0x0000` | Fresh installation on any supported Cardputer; resets internal settings |
+| `M5Chord-v1.1.0-app.bin` | `0x10000` | Application component; never flash this at zero |
 | `bootloader.bin`, `partitions.bin`, `boot_app0.bin` | See update command | Settings-preserving update alongside the app |
 | `SHA256SUMS`, `manifest.json` | Not flashed | Integrity checks and exact image metadata |
 
@@ -106,7 +136,7 @@ On Windows, use `py -m venv .venv`, then `.venv\Scripts\activate.bat` in Command
 Run from the extracted release directory. Replace `PORT` with the serial port identified above:
 
 ```sh
-python -m esptool --chip esp32s3 --port PORT --baud 460800 write_flash 0x0000 M5Chord-v1.0-universal.bin
+python -m esptool --chip esp32s3 --port PORT --baud 460800 write_flash 0x0000 M5Chord-v1.1.0-universal.bin
 ```
 
 ### Update while retaining M5Chord settings
@@ -114,12 +144,12 @@ python -m esptool --chip esp32s3 --port PORT --baud 460800 write_flash 0x0000 M5
 Use this instead of the merged image when updating an existing build of this project:
 
 ```sh
-python -m esptool --chip esp32s3 --port PORT --baud 460800 write_flash 0x0000 bootloader.bin 0x8000 partitions.bin 0xe000 boot_app0.bin 0x10000 M5Chord-v1.0-app.bin
+python -m esptool --chip esp32s3 --port PORT --baud 460800 write_flash 0x0000 bootloader.bin 0x8000 partitions.bin 0xe000 boot_app0.bin 0x10000 M5Chord-v1.1.0-app.bin
 ```
 
 This selects app0 and writes only the programming regions, leaving NVS untouched. App-only flashing is for advanced users who have verified the same `default_8MB` partition layout and active app0 slot. Do not use erase-all or change the flash settings supplied by the binary.
 
-Expect writing progress and `Hash of data verified.` On completion, release G0 and power-cycle the Cardputer. You should see **M5Chord / V1.0** during startup, followed by the performance screen. Fresh settings start in BYPASS. Press Tab to open Options, and `V` to cycle to Geek view: `1.0/1.1` or `ADV` identifies the keyboard family.
+Expect writing progress and `Hash of data verified.` On completion, release G0 and power-cycle the Cardputer. You should see **M5Chord / V1.1.0** during startup, followed by the performance screen. Fresh settings start in CHORD and Keyboard view; saved mode/view preferences take precedence. Press Tab to open Options, and `V` to cycle to Geek view: `1.0/1.1` or `ADV` identifies the keyboard family.
 
 The programming port normally disappears when the app switches native USB into host mode. It is not a USB-MIDI output or serial console while playing. If upload fails, check the data cable, re-enter G0 download mode and retry at `--baud 115200`.
 
@@ -131,7 +161,7 @@ M5Burner catalog publication has not been performed. The merged image is package
 
 1. Connect Unit MIDI in `SEPARATE` mode and its DIN OUT to your instrument's MIDI IN. Set the receiver to channel 1 initially.
 2. Connect a controller over BLE or direct USB. Check BYPASS first: notes should reach the receiver, and the receive dot/counters should react.
-3. Press `M` until CHORD. Open Tab Options, set **Play style = LATCHED**, **Performance = BLOCK**, **Performance on = ON**, **Performance ch = 1**, and **Harmonic quantize = OFF**. Close Tab.
+3. Press `M` until CHORD. Open Tab Options, set **Play style = LATCHED**, **Performance = BLOCK**, **Performance on = ON**, **Output channel = 1**, and **Harmonic quantize = OFF**. Close Tab.
 4. Tap `E` for major, then play a root on the external keyboard. C should produce C/E/G. Tap `W` for minor. The Cardputer letter keys select harmony; they are not a piano keyboard.
 5. Hold `F` while playing for a ninth. Hold `S` for m7 or `D` for M7. Hold several extension keys/pads together to combine them. Press `X` for STACK if you prefer toggling extensions on and off with taps.
 6. For arp, press `P` until ARP; hold a root. In Options, start with BPM 120, Rate 1/16, Gate 50%, Direction UP. The arp sequences the generated chord, not every scale degree. Press `V` to see individual output-key attacks and releases.
@@ -157,16 +187,16 @@ PLATFORMIO_CORE_DIR="$PWD/.pio" pio run -e cardputer-universal
 
 To enter Cardputer download mode, switch it off, hold G0, connect the USB-C data cable to the computer, release G0, and upload. Disconnect the programming cable before using the same native USB connector as a host.
 
-The generated application image is `.pio/build/cardputer-universal/firmware.bin` at offset `0x10000`. The legacy `cardputer-adv` environment remains a build alias with the same shared configuration. Do not flash the application at zero. Clone the source with `git clone https://github.com/jrdntnnr/M5Chord.git`, enter `M5Chord`, and install PlatformIO Core before building. To reproduce the 1.0 source, select tag `v1.0`.
+The generated application image is `.pio/build/cardputer-universal/firmware.bin` at offset `0x10000`. The legacy `cardputer-adv` environment remains a build alias with the same shared configuration. Do not flash the application at zero. Clone the source with `git clone https://github.com/jrdntnnr/M5Chord.git`, enter `M5Chord`, and install PlatformIO Core before building. To reproduce this release, select tag `v1.1.0` (the older release remains at `v1.0`).
 
 To package a release, use the Python interpreter running PlatformIO with its esptool dependencies available:
 
 ```sh
-python tools/package_firmware.py --version 1.0 --output dist/M5Chord-v1.0
+python tools/package_firmware.py --output dist/M5Chord-current
 python -m unittest discover -s tools -p 'test_package_firmware.py'
 ```
 
-Use `--core-dir` if PlatformIO's packages are not in `.pio`. The package script requires a new output directory and never reads flash from a connected device.
+Use `--core-dir` if PlatformIO's packages are not in `.pio`. The package script derives the version from AppInfo, accepts development/RC versions, requires committed tracked source and no untracked files, rejects diagnostic firmware, and requires a new output directory. It never reads flash from a connected device. The published v1.0 tag retains its original packaging instructions.
 
 ## Desktop tests
 
@@ -188,24 +218,48 @@ Tests cover harmony, transport parsing, scheduling, note ownership, panic, exact
 4. Boot the Cardputer.
 5. Connect a compatible USB-MIDI controller directly to its USB-C host port. Use the BLE section below for SMK-37.
 6. Confirm `USB` turns green. Use `V` to reach Geek view and inspect VID, PID, MIDI interface, endpoint, queue, lateness, and active-note data.
-7. Leave the first-boot mode at `BYPASS` and verify keys, velocity, sustain, pitch bend, modulation, CC, program change, and pressure.
+7. Select `BYPASS` for the initial passthrough test and verify keys, velocity, sustain, pitch bend, modulation, CC, program change, and pressure. Version 1.1.0 starts fresh installations in CHORD; the published 1.0 build used BYPASS.
 8. Press `M` to enter `CHORD`, choose harmony, and test note release before enabling rhythmic performance modes.
 
 Repeated resets, attachment loops, or intermittent enumeration usually indicate USB power or cable trouble. The pinned ESP-IDF 4.4 host stack does not support external USB hubs. Use a direct connection or a single-device USB 2.0 power injector that does not introduce a hub.
 
 ## BLE MIDI connection
 
-**SMK-37 startup bug in 1.0:** a green connection indicator does not guarantee key input. The user-reported workaround is to switch the SMK-37 off and back on **twice**, leaving M5Chord running. Wait for reconnection and play a key after the cycles. This is a known bug scheduled for a coming version, not a permanent setup requirement or a guaranteed remedy for every connection problem.
+Any brand exposing the **standard BLE-MIDI service and notification characteristic** can connect; there is no manufacturer whitelist. Discovery uses the advertised MIDI service UUID, with a case-insensitive MIDI-name fallback and the legacy SMK BLE identity fallback. The first queued candidate is validated by GATT discovery before being marked ready. Devices advertising neither the service UUID nor a recognized MIDI identity are not automatically found. Bluetooth Classic, audio/A2DP, HID-only keyboards and proprietary non-MIDI protocols are not supported. This is one BLE peripheral at a time, not a multi-device merger or manual device-picker UI.
+
+**SMK-37 startup bug:** a green connection indicator does not guarantee key input. The user-reported workaround is two SMK-37 off/on cycles, with M5Chord running. When testing 1.1.0, first try turning the keyboard on once and playing: capture that result before applying the workaround. Tab → **BLE reconnect** restarts the link without switching the keyboard off. It releases notes first; connection work waits until the engine and DIN queue are idle.
 
 1. Disconnect or disable any Mac, phone, or tablet already connected to the SMK-37 BLE MIDI endpoint.
 2. Enable Bluetooth MIDI on the SMK-37. Its MIDI identity is normally `SMK-37 Pro_BLE`.
 3. Boot the Cardputer. It scans automatically and does not require a pairing menu or passkey.
-4. Confirm `BLE` changes from yellow while scanning/setting up to green after the keyboard acknowledges the MIDI notification subscription.
+4. `BT` stays amber while scanning, setting up, or connected without decoded MIDI in this session. It turns green after MIDI is decoded. A quiet keyboard is not automatically considered faulty; play a note to confirm input.
 5. Use `V` to reach Geek view. `BLE:SUB` means subscription setup; `BLE:ON` means subscription accepted, not proof that keys are transmitting. `N` counts notifications, `E` counts decoded MIDI events, and `D` counts queue drops. Playing keys should increase `N` and `E`.
 
-The existing subscription retries and refresh do not fully resolve the reported SMK-37 startup issue. Geek `N`/`E` counters, not the green connection label alone, confirm received notifications/events. Diagnostic exports include subscription attempts and GATT/API status for follow-up investigation.
+The candidate performs an asynchronous MIDI I/O characteristic read before notification registration and descriptor enable, with acknowledgements and bounded timeouts. This initial read is specified in [BLE-MIDI 1.0, section 5](https://www.hangar42.nl/wp-content/uploads/2017/10/BLE-MIDI-spec.pdf). If the read requires authentication/encryption, one security attempt precedes a read retry; unsupported passkey workflows are not implemented. Authentication/encryption-required descriptor failures request encryption before bounded retries. A guarded fallback requests MTU exchange when the pinned stack skips it on the first connection; LINK, MTU_REQUEST and MTU records expose the sequence. The unsuccessful two-second subscription toggle has been removed. There is no idle reconnect watchdog: silence may simply mean nobody is playing.
 
-USB and BLE inputs share the same MIDI parser, controller mappings, musical engine, scheduler, active-note registry, and panic behavior. A BLE disconnect invokes panic before automatic reconnection scanning begins.
+This corrects a protocol omission, but is not proof of the SMK-37 root cause. In the prior diagnostic capture, Cardputer-side reconnect executed and scanning resumed, but rediscovery required restarting the keyboard. Keep the workaround documented until the new candidate passes cold-start tests in both power-on orders. See [physical results](docs/SMK37_TEST_RESULTS.md).
+
+Follow-up: the read-handshake candidate still received no MIDI while keys were played. Inspection of the pinned Arduino BLEClient found a first-connection ordering problem that can skip MTU negotiation: its CONNECT handler compares the incoming ID with the previous ID before OPEN updates it. The current source adds a guarded MTU request only when that library path would be skipped. New `LINK`, `MTU_REQUEST` and `MTU` trace records make the decision and result visible. This is the next targeted repair candidate, pending hardware confirmation; the earlier read-only repair must not be advertised as fixing the SMK-37.
+
+USB, BLE and DIN feed the same normalized MIDI event, controller mapping, musical engine, scheduler and active-note ownership path after input selection. A selected-source BLE disconnect invokes panic before automatic reconnection scanning begins.
+
+## BLE logging
+
+Normal firmware keeps a bounded 128-record BLE trace in RAM. Tab → Export diagnostics saves it inside `/M5Chord/logs/diagnostics.json` when notes are released, loop/file playback is stopped and DIN output is drained. The trace includes monotonic microseconds, scan/connect/discovery, handles, initial read/results, registration, descriptor writes, MTU, connection parameters, security/authentication and disconnect reasons. The first 16 accepted notifications and up to 16 rejected notifications per session are sampled, with at most 16 payload bytes each. MIDI handling does not write files or render UI. Trace queue drops are counted; the USB console also reports free heap and main-task stack high-water margin.
+
+For live diagnosis over a USB cable to a computer, build **cardputer-diagnostics**. It keeps BLE and DIN available but **disables USB-MIDI host input**, because the same native USB peripheral is used as the console:
+
+```sh
+PLATFORMIO_CORE_DIR="$PWD/.pio" pio run -e cardputer-diagnostics
+PLATFORMIO_CORE_DIR="$PWD/.pio" pio run -e cardputer-diagnostics -t upload --upload-port PORT
+python tools/read_ble_log.py --port PORT --seconds 60 --output .local/ble-startup.log
+```
+
+Use the PlatformIO Python interpreter or install `pyserial` in a virtual environment. The capture script refuses to overwrite an existing log. It opens the serial port without an intentional reset and requests the buffered trace. `--reconnect` requests a BLE reconnect for another trial. In a serial terminal, `l` replays the trace, `r` requests reconnect, and `p` invokes panic. Console output is bounded and nonblocking; a disconnected computer must not hold up MIDI.
+
+To test: leave Cardputer USB attached, disconnect other BLE hosts, start the logger, turn the SMK-37 on once and play notes. Look for `OPEN`, `DISCOVERY`, `REGISTER_RESULT`, `CCCD_ON`, `WRITE_RESULT`, `READY`, then `NOTIFY` and increasing `N`/`E`. `status=0` on GATT results means success; NOTIFY status reports the number of decoded events. `CCCD_OFF` followed by `CCCD_ON` identifies the one-shot repair. Save logs for both the failing first connection and a working reconnect, recording hardware and startup order. Review device names/MIDI payloads before sharing logs publicly.
+
+After diagnosis, flash **cardputer-universal** to restore USB-MIDI host input. Do not distribute the diagnostics binary as the normal universal build.
 
 ## Arabic scale options
 
@@ -239,14 +293,14 @@ To try them: select KEY mode with `M`; open Options with Tab; choose Key root an
 | C | Toggle MIDI clock and send Start/Stop |
 | H | Toggle manual harmonic quantization |
 | V | Cycle chord, notes, keyboard, and Geek views |
-| L | Cycle the primary output through Ambient Zero layers 1–4 |
+| L | Cycle the primary output through channels 1–N; Tab → Layer channels sets N, default 4 |
 | X | Toggle momentary / stack extension behavior and clear active extensions |
 | O | Start the nine-pad SMK setup wizard |
 | Tab | Open/close Options |
 | `;` / `.` | Previous/next Options row |
 | `,` / `/` | Decrease/increase a parameter; select mapping index |
 | Enter | Confirm the selected command |
-| Esc/backtick | Leave Options or cancel learning |
+| Esc/backtick | Open/close shortcut help; cancel an active learning/editor screen |
 | Z | Start a new loop recording; press again to finish recording and play |
 | Space | Play/stop loop; finish recording and play |
 | Fn + Z | Toggle overdub |
@@ -259,11 +313,13 @@ To try them: select KEY mode with `M`; open Options with Tab; choose Key root an
 
 Bindings are centralized in `src/controller/KeyBindings.h` with a compile-time uniqueness check. Keys fire on press edges, not whenever another held key changes. Fn shortcuts never also fire their base key. Harmonic releases retain their original action even if Fn or the menu state changes. Menu commands run only on Enter, never from adjustment arrows. Performance shortcuts are suppressed while Options is open; panic remains available. Physical keyboard rollover still needs device testing.
 
+**Help:** Esc opens seven pages containing every bound shortcut. Tab → Help / shortcuts → Enter opens the same list. Use `;` / `,` for the previous page, `.` / `/` / Enter for the next, and Esc to return. From Options, Esc opens help and Esc returns to Options; Tab closes Options. From performance help, Tab opens Options. Fn + Esc remains panic everywhere. Releasing a held chord modifier while viewing help still releases that modifier.
+
 Panic sends sustain-off, All Sound Off, Reset All Controllers, and All Notes Off on all 16 channels, explicitly releases every tracked pitch, cancels the scheduler, and clears every active voice. USB or BLE removal invokes the same path.
 
 ## MIDI defaults
 
-- First boot: bypass
+- First boot: CHORD and Keyboard view in 1.1.0; existing saved mode/view choices take precedence.
 - Performance: block, channel 1, enabled
 - Bass: off, channel 2
 - Raw chord: off, channel 3
@@ -296,7 +352,7 @@ Tab Options keeps its controls and contextual help, with a numbered progress rul
 
 The keyboard page is live output, not a cached chord diagram. It follows messages accepted by the DIN sink after scheduler and note-ownership processing: green keys indicate Note On gates, and 50 ms amber marks indicate recent attacks, including notes whose gates are shorter than a frame. Arp/pattern advance note by note, strum/slop build in dispatch order, and harp releases individual gates. MIDI Note Off removes the gate even if the receiving synth sustains the sound. Panic clears gates and attack marks.
 
-KEY/CHORD show the selected performance MIDI channel; bass/raw-chord streams on other channels do not obscure arp movement. Loop output on the selected channel is included. BYPASS displays all output channels. The octave-labelled window expands for multi-octave modes. The keyboard requests updates at up to 60 Hz, other views at 30 Hz; no MIDI event waits for an animation. Events closer together than a frame can appear together, and queued DIN acceptance is not a physical wire/audio timestamp. Runtime latency and frame rate require hardware measurement.
+KEY/CHORD show the selected performance MIDI channel; bass/raw-chord streams on other channels do not obscure arp movement. Loop and MIDI-file output on the selected channel are included. BYPASS displays all output channels. The octave-labelled window expands for multi-octave modes. The keyboard requests updates at up to 60 Hz, other views at 30 Hz; no MIDI event waits for an animation. Events closer together than a frame can appear together, and queued DIN acceptance is not a physical wire/audio timestamp. Runtime latency and frame rate require hardware measurement.
 
 KEY mode builds its base triad from the scale, then adds the explicitly selected interval: 6 = nine semitones, m7 = ten, M7 = eleven, and 9 = fourteen above the chord root. In C Major, the additions are A, B-flat, B, and D respectively. These additions can leave the selected scale; m7 and M7 remain independent. CHORD mode still snaps the completed chord to the scale when harmonic quantization is enabled, so snapping can merge extensions there.
 
@@ -304,7 +360,7 @@ KEY mode builds its base triad from the scale, then adds the explicitly selected
 
 Tab exposes key/scale, transpose, voicing, playstyle, extension behavior, performance mode/direction/rate/gate/strum/slop, BPM/clock, three output channels and stream enables, bass mode/octave, expression routing, velocity sensitivity, input channel/range, loop length/grid, and numbered storage slots. Below these parameters are learning, mapping, profile, preset, loop, and diagnostic commands.
 
-Navigate with `;` / `.`, adjust with `,` / `/`, and use Enter for commands. Do not hold Fn for menu arrows. Tab closes Options; Esc/backtick backs out or cancels learning. Changes apply immediately; save commands wait until it is safe to access storage.
+Navigate with `;` / `.`, adjust with `,` / `/`, and use Enter for commands. Do not hold Fn for menu arrows. Tab closes Options; Esc opens help, or cancels active learning/editing. Changes apply immediately; save commands wait until it is safe to access storage.
 
 | Options setting | Values / use |
 |---|---|
@@ -316,7 +372,9 @@ Navigate with `;` / `.`, adjust with `,` / `/`, and use Enter for commands. Do n
 | Rate / Gate % | 1/4, 1/8, 1/8T, 1/16, 1/16T, 1/32 / 1–100% |
 | Strum ms / Slop % | 2–120 ms between strum notes / 0–100% slop amount |
 | BPM / Clock out | 30–300 BPM / outgoing MIDI clock ON or OFF |
-| Performance ch / Bass ch / Raw chord ch | Independent MIDI output channels 1–16 |
+| Output channel / Bass ch / Raw chord ch | Independent MIDI output channels 1–16 |
+| MIDI input | AUTO, BLE, USB or DIN; source isolation, not merging |
+| Layer channels | 1–16, default 4; L and the mapped layer pad cycle channels 1 through this count |
 | Performance on / Bass on / Raw chord on | Enable each stream independently; raw chord bypasses the rhythmic performance mode |
 | Bass mode / Bass octave | OFF, ROOT, LOWEST, UNISON / −2…+1 octaves |
 | Expression | SOURCE channel, GENERATED channels, or OFF |
@@ -326,7 +384,7 @@ Navigate with `;` / `.`, adjust with `,` / `/`, and use Enter for commands. Do n
 | Harmonic quantize | CHORD scale snapping ON/OFF; KEY automatic harmony is separate |
 | Velocity sense | SOURCE VELOCITY or FIXED 100 |
 
-The remaining command rows are Learn key root, Learn control, Pad setup, Mapping/delete, Select/Reload/Save profile, Save/Load preset, Loop record/play/overdub/undo/clear, Save/Load loop, Export diagnostics and Edit mapping. They require Enter; merely navigating to a command does not execute it.
+The remaining command rows are Learn key root, Learn control, Pad setup, Mapping/delete, Select/Reload/Save profile, Save/Load preset, Loop record/play/overdub/undo/clear, Save/Load loop, Export diagnostics, Edit mapping, Help/shortcuts, BLE reconnect and MIDI Player. They require Enter; merely navigating to a command does not execute it.
 
 - `LATCHED`: the existing workflow. Tap a chord quality, then play roots; quality stays selected. Extensions are still momentary unless `X` enables stacking.
 - `SIMPLE`: hold a quality before pressing a root. Otherwise the root plays as a single note. The held chord keeps its original quality/extensions until root release.
@@ -337,7 +395,7 @@ The remaining command rows are Learn key root, Learn control, Pad setup, Mapping
 
 ## Controller profiles
 
-Profiles live in `/midi-brain/controllers/`; the default file is `smk37.json`. Options can select, reload, or save profiles. The selected path is remembered. On connection, matching prefers VID/PID, then manufacturer+product text, then product text; otherwise it uses the selected profile. USB strings and BLE advertised names are read for matching. One shared profile is active; use one input controller at a time.
+Profiles live in `/M5Chord/controllers/`; the default file is `smk37.json`. Options can select, reload, or save profiles. The selected path is remembered. On connection, matching prefers VID/PID, then manufacturer+product text, then product text; otherwise it uses the selected profile. USB strings and BLE advertised names are read for matching. One shared profile is active; use one input controller at a time.
 
 Missing SD media or a missing/invalid profile produces an empty Generic mapping without disabling the musical engine. The parser rejects files over 64 KB, more than 128 mappings, malformed JSON, invalid bounds/types, and unknown actions. Up to 32 profile filenames are listed. Loading a profile also applies its input channel/range; use Save Profile to retain changes to those fields in the profile.
 
@@ -381,9 +439,29 @@ The wizard learns the actual message, channel, and cable. It requires release of
 
 The extension pads are momentary by default. Press `X` to enable stacking; extension presses then toggle persistent additions. Pressing `X` again returns to momentary operation. Switching clears the extension set; panic clears momentary extensions. Only stacked extensions persist across reboot. The performance footer shows `HOLD` or `STACK`.
 
-For a receiver such as Ambient Zero configured with layers 1–4 on MIDI channels 1–4, `L` and the learned `LAYER NEXT` pad safely panic active notes, then cycle the primary output through those channels. Match the receiver's channel configuration. The selected layer appears as `L1`–`L4` in the upper rail and is saved in internal settings. In bypass mode, channel data remains transparent until lane selection is first used; after that, channel messages are sent to the selected layer.
+Tab → **Layer channels** controls how many MIDI channels `L` and the learned `LAYER NEXT` pad cycle through: 1–16, default **4**. It also limits MIDI-file playback channels. For Ambient Zero's four-channel setup, leave it at four. Set eight to cycle 1→2→…→8→1; one always selects channel 1. The value is saved. Changing the count stops MIDI-file playback and releases its notes; it does not retune a live-held note or immediately change the selected live channel. The next L/pad press selects within the new range and panics old notes first. Match the receiver's configuration. The upper rail shows `L1`–`L16`. BYPASS retains input channels until lane/output-channel selection enables overriding them.
 
-Fn+G or Options → Learn Control captures a note, CC, program change, channel pressure, or pitch bend. Choose action, trigger, relative encoding, and whether it consumes MIDI; select Save Mapping and press Enter. Options → Edit Mapping edits the selected mapping; Mapping/Delete removes it. Left/right select the mapping index. New/edited mappings queue a profile save; deletions require Save Profile. Source number/channel/cable are captured exactly. To change a selector, delete it and learn again. Advanced ranges/match metadata can be edited in SD JSON, then reloaded from Options.
+## SD MIDI-file playback
+
+1. Put Standard MIDI Files (`.mid` or `.midi`, case-insensitive extension) in **`/midi` at the root of a FAT32 microSD card**. Use filenames shorter than 64 bytes. Insert the card before boot; use a computer/card reader to copy files. USB mass-storage mode is not provided.
+2. Open **Tab → MIDI Player → Enter**. From the first Options row, one Up press reaches MIDI Player. The dedicated page has **Load** and **Play/Stop**, not three separate numbered commands. Choose a button with `,` / `/` (or `;` / `.`), then Enter. The Options number is a menu position, not a MIDI channel.
+3. Choose **Load**, browse `/midi` with `;` / `.` (or `,` / `/`), then Enter. Browsing/loading stops musical playback and drains queued output first. The folder is created if absent on a writable card. Validation runs in the background with **CHECKING FILE %** and a progress bar; the interface remains usable. Leaving the page does not cancel validation. Invalid files leave a persistent explanation on the player page, not an expiring toast.
+4. Successful loading selects **Play** if the page is still open; playback never starts automatically. Enter starts from the beginning. The button becomes **Stop**; Enter again stops, not pauses. The page shows the filename, elapsed/total time and used/available note-playing channels: **4/5 CH** means four of five channels are included. Esc returns to Options, Tab exits without stopping playback. Fn + Esc remains panic everywhere. No new physical performance shortcuts were added; `file.stop` remains available for MIDI mapping.
+5. Adjust **Tab → Layer channels** before playing. Default is four. The file stays loaded after stopping, but is not restored after reboot. Loading another file replaces it; a failed load leaves no playable file.
+
+Channel policy: choose the lowest-numbered source channels containing Note On events, keep at most N, and map them in ascending source-channel order to output channels **1–N**. If a file uses channels 2, 4, 6, 8 and 10 with N=4, they map to outputs 1, 2, 3 and 4; source channel 10 is omitted. Notes, velocity, expression, program changes and pitch bend follow the same mapping. This is a **channel limit, not a polyphony or track limit**: a chord on one channel retains all its notes, and multiple tracks on the same channel stay together. MIDI channel 10 has no special drum reservation; its mapping may change, so prepare files for the receiving instrument's channel layout.
+
+Playback sends the file's MIDI directly to DIN output, without chord/scale/arp transformation. It follows the file's tempo map (120 BPM if absent), not the live BPM setting or external MIDI clock. Live clock output, if enabled, remains at the live BPM and is not synchronized to the file; disable it when unwanted. Playback is one-shot, with no seek, pause, repeat, tempo override or file editing in this version. Starting file playback stops the looper and releases live notes; starting loop record/play/overdub stops the file. Live playing can accompany a file afterward, but share channels deliberately: MIDI sustain/controllers affect the whole channel. File stop resets sustain, sostenuto and hold-2 on file output channels; program/controller changes otherwise remain on the receiver.
+
+Supported: SMF format 0 and 1, PPQN timing, running status, tempo changes, multiple tracks, Note On/Off (including velocity-zero release), CC below 120, program change, pressure and pitch bend. Limits: **1 MiB file, 32 tracks, 256 simultaneous file-owned notes, 24-hour duration**, with bounded shared scheduler/output queues. The device no longer has a 2,048-event whole-song limit: it validates the complete file, then streams through a fixed **512-event read-ahead buffer**. Files exceeding parse limits are rejected, not partially played. Dense output may exceed DIN bandwidth; overload recovery prioritizes release safety. Unmatched notes are released at end/stop. SysEx and non-tempo metadata are skipped; CC 120–127 are suppressed to avoid file-triggered channel-wide resets. Format 2, SMPTE division, nonzero MIDI-port metadata, RIFF/RMID and MIDI 2.0 files are not supported. Export format 0/1 PPQN from your sequencer if needed. These limits make this a small controller-side player, not an unrestricted DAW file engine.
+
+The browser lists up to 32 files, alphabetized after discovery, and examines at most 512 directory entries. Subfolders are not searched. A background storage task owns the open file and uses a fixed read cache; the musical engine only consumes buffered events. MIDI event processing does not access SD, allocate memory, or bypass `VoiceId`, the scheduler and active-note registry. **Keep the SD card inserted while playing.** An SD read error or buffer underrun stops playback and releases file-owned notes; the reason stays on the player page. Restarting playback rewinds and buffers again. The existing output-keyboard view shows dispatched file notes alongside live output. Physical SD playback, DIN receiver behavior and sustained-load margins remain acceptance checks in [TEST_PLAN.md](docs/TEST_PLAN.md).
+
+For a read-only desktop check of a file, build with CMake and run `build/midi_file_check /path/to/song.mid`. It validates the complete file and simulates two buffered plays through the real scheduler/registry with four output channels. It reports channel attacks/releases and fails on dropped events or remaining note owners. This does not measure physical SD latency or DIN bandwidth. Diagnostic USB console summaries also include filename, player state, validation percentage and playback time.
+
+## General MIDI Learn
+
+Fn+G or Options → Learn Control captures a note, CC, program change, channel pressure, or pitch bend. Choose action, trigger, relative encoding, and whether it consumes MIDI; select Save Mapping and press Enter. Options → Edit Mapping edits the selected mapping; Mapping/Delete removes it. Left/right select the mapping index. New/edited mappings queue a profile save; deletions require Save Profile. Source number/channel/cable are captured exactly. To change a selector, delete it and learn again. Advanced ranges/match metadata can be edited in SD JSON, then reloaded from Options. File browse/load/play/stop also use semantic actions, so MIDI mappings and Cardputer controls share the same execution path.
 
 ## MIDI loops and presets
 
@@ -393,13 +471,15 @@ Loops store post-engine channel MIDI, including enabled performance/bass/raw str
 
 The screen shows loop state and entry count. Loop playback has separate note ownership; stopping it does not release a live-held copy of the same pitch. Loop sustain is reset on loop-used sustain channels at stop/wrap; put live sustained playing on a separate channel if independent pedal behavior is needed. Panic stops all playback.
 
-Options offers Save Loop/Load Loop and 16 shared numbered preset/loop slots. Fn+S/Fn+L save/load controller settings, not loops. Files are stored as `/midi-brain/presets/preset-01.json` and `/midi-brain/loops/loop-01.json` through slot 16. Save targets are captured when requested; storage waits for released notes, stopped playback, and an empty DIN queue. Only one session-storage request can be pending. Loads stop active notes first. Invalid schemas, checksums, ranges, or unavailable SD fail visibly. Temporary files and `.bak` files protect replacement; real power-loss recovery still needs physical testing.
+Options offers Save Loop/Load Loop and 16 shared numbered preset/loop slots. Fn+S/Fn+L save/load controller settings, not loops. Files are stored as `/M5Chord/presets/preset-01.json` and `/M5Chord/loops/loop-01.json` through slot 16. Save targets are captured when requested; storage waits for released notes, stopped playback, and an empty DIN queue. Only one session-storage request can be pending. Loads stop active notes first. Invalid schemas, checksums, ranges, or unavailable SD fail visibly. Temporary files and `.bak` files protect replacement; real power-loss recovery still needs physical testing.
 
-Settings auto-save to internal NVS without SD. Loops require explicit SD save and load and never auto-play after boot. Missing SD disables only SD-dependent operations.
+Settings auto-save to internal NVS without SD. A first installation with no valid saved settings starts in **CHORD mode** and **Keyboard view**. Valid existing settings keep the user's selected mode, including KEY or BYPASS. View changes now persist separately in internal storage and do not change preset schemas. Older builds did not save a view preference, so an upgrade with no saved view starts in Keyboard view; choose another view once to retain it afterward. Allow at least 1.5 seconds after changing a preference and stop playback/release notes before powering off so the idle save can finish. Loops require explicit SD save and load and never auto-play after boot. Missing SD disables only SD-dependent operations.
+
+Version 1.1.0 migrates schema-2 settings/presets with AUTO input and four layer channels. It saves schema 3 under a separate internal `settings-v3` key, retaining the older `settings-v2` record for downgrades. An older 1.0 build will not load new schema-3 SD presets and will see its earlier internal settings rather than subsequent changes.
 
 ## Diagnostics
 
-Options → Export Diagnostics writes `/midi-brain/logs/diagnostics.json`: transport identity, counts, scheduler lateness, DIN high water, loop drops, and a 64-sample/one-second runtime history. Collection uses a fixed RAM ring; file output is deferred until idle. Adjacent expression messages are coalesced without crossing note events; Note Ons can displace coalescible traffic. If an exhausted DIN queue cannot accept a critical release, the next main-loop pass clears queued traffic and issues a full panic. BLE queue overflow discards the incomplete input batch and invokes panic. These paths are safety recovery, not a claim of lossless MIDI under unlimited load.
+Options → Export Diagnostics writes `/M5Chord/logs/diagnostics.json`: transport identity, counts, scheduler lateness, DIN high water, loop drops, and a 64-sample/one-second runtime history. Collection uses a fixed RAM ring; file output is deferred until idle. Adjacent expression messages are coalesced without crossing note events; Note Ons can displace coalescible traffic. If an exhausted DIN queue cannot accept a critical release, the next main-loop pass clears queued traffic and issues a full panic. BLE queue overflow discards the incomplete input batch and invokes panic. These paths are safety recovery, not a claim of lossless MIDI under unlimited load.
 
 ## Architecture
 
@@ -409,13 +489,14 @@ The native ESP-IDF USB Host Library scans the active configuration, bounds-check
 
 ## Known limitations
 
-- SMK-37 Bluetooth can connect without key input; switch the keyboard off/on twice. A fix is planned for a coming version, not included in 1.0.
+- SMK-37 Bluetooth can connect without key input; switch the keyboard off/on twice. The 1.1.0 handshake changes are not a verified fix; the workaround remains documented.
 - Cardputer 1.0 compatibility was reported working; 1.1 physical testing and exhaustive per-release hardware/latency checks remain outstanding.
 - One USB device and the first claimable MIDIStreaming interface are supported at a time.
 - BLE MIDI supports one automatically discovered standard BLE-MIDI peripheral at a time and has no on-device chooser.
 - USB is host input, not a USB-MIDI device output to a DAW. BLE is controller input only.
 - No SysEx forwarding, external-clock-follow mode, ORC secret-chord tables, or factory-pattern library.
 - Loops retain recorded tempo/channels, and notes crossing a loop boundary are clipped. There is no count-in or file naming UI.
+- SD MIDI-file playback has explicit format/event/track limits and remaps selected source channels; see its section above. It does not preserve a General MIDI drum-channel reservation.
 - No synth, audio, effects, drum sounds, or waveform display.
 - The scheduler is deterministic and bounded, but sustained DIN saturation needs physical stress measurement.
 

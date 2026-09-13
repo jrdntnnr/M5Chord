@@ -3,6 +3,6 @@
 namespace midibrain {
 
 inline constexpr char AppName[] = "M5Chord";
-inline constexpr char AppVersion[] = "1.0";
+inline constexpr char AppVersion[] = "1.1.0";
 
 }

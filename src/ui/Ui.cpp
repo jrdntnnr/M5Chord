@@ -166,7 +166,7 @@ void Ui::drawIndicators(const UsbMidiSource& usb, const BleMidiSource& ble, cons
     const bool pending = ble.scanning() || state == BleMidiState::Connecting || state == BleMidiState::Subscribing;
     frame.fillRect(126, 10, 3, 3, rx_active_ ? accent : border);
     line("USB", 143, 8, 23, &fonts::Font0, usb.connected() ? accent : quiet);
-    line("BT", 181, 8, 16, &fonts::Font0, ble.connected() ? accent : pending ? selected : quiet);
+    line("BT", 181, 8, 16, &fonts::Font0, ble.diagnostics().midi_received ? accent : (ble.connected() || pending) ? selected : quiet);
     line("SD", 219, 8, 14, &fonts::Font0, profiles.available() ? accent : quiet);
 #else
     static_cast<void>(usb); static_cast<void>(ble); static_cast<void>(profiles);
@@ -197,7 +197,7 @@ void Ui::drawChrome(const App& app, const UsbMidiSource& usb, const BleMidiSourc
     constexpr const char* styles[]{"SIMPLE", "ADV", "FREE", "LATCH"};
     line(styles[static_cast<unsigned>(state.harmonic.play_style)], 144, 124, 42, &fonts::Font0, muted);
     constexpr const char* loops[]{"", "REC", "LOOP", "DUB"};
-    line(loops[static_cast<unsigned>(app.looper().mode())], 207, 124, 26, &fonts::Font0, selected);
+    line(app.midiFile().playing() ? "FILE" : loops[static_cast<unsigned>(app.looper().mode())], 207, 124, 26, &fonts::Font0, selected);
 #else
     static_cast<void>(app); static_cast<void>(usb); static_cast<void>(ble); static_cast<void>(profiles);
 #endif
@@ -284,6 +284,9 @@ void Ui::drawGeek(const App& app, const UsbMidiSource& usb, const BleMidiSource&
     line(text, 8, 54, 224, &fonts::Font0, muted);
     std::snprintf(text, sizeof(text), "BT %s N%lu E%lu", BleMidiSource::stateName(ble.diagnostics().state), static_cast<unsigned long>(ble.diagnostics().notifications_received), static_cast<unsigned long>(ble.diagnostics().events_received));
     line(text, 8, 66, 224, &fonts::Font0, muted);
+    std::snprintf(text, sizeof(text), "DIN E%lu ERR%lu INPUT %s", static_cast<unsigned long>(app.state().stats.din_events_rx),
+        static_cast<unsigned long>(app.state().stats.din_errors), app.state().input_port == 0 ? "AUTO" : app.state().input_port == 1 ? "BLE" : app.state().input_port == 2 ? "USB" : "DIN");
+    line(text, 8, 78, 224, &fonts::Font0, muted);
 #else
     static_cast<void>(app); static_cast<void>(usb); static_cast<void>(ble); static_cast<void>(profiles);
 #endif
@@ -326,13 +329,49 @@ void Ui::drawLearn(const InputKeys& input) {
 #endif
 }
 
+void Ui::drawMidiPlayer(const App& app, const InputKeys& input, uint64_t nowUs) {
+#ifdef MIDIBRAIN_DISPLAY
+    const auto& player = app.midiFile();
+    frame.fillScreen(background);
+    line("MIDI PLAYER", 8, 3, 224);
+    rule(22);
+    paragraph(player.name()[0] ? player.name() : "Choose a file from /midi", 8, 29, 224, 2, ink);
+    char status[96]{};
+    if (input.fileLoading()) std::snprintf(status, sizeof(status), "CHECKING FILE  %u%%", input.fileProgress());
+    else std::snprintf(status, sizeof(status), "%s", player.status());
+    line(status, 8, 53, 224, &fonts::Font0, selected);
+    const auto duration = player.file().duration_us;
+    const auto elapsed = player.elapsed(nowUs);
+    const unsigned progress = input.fileLoading() ? input.fileProgress() : duration ? static_cast<unsigned>(elapsed * 100 / duration) : 0;
+    frame.drawFastHLine(8, 68, 224, muted);
+    frame.drawFastHLine(8, 68, 224 * std::min(progress, 100U) / 100, accent);
+    unsigned available = 0;
+    for (unsigned i = 0; i < 16; ++i) if (player.file().channels & (1U << i)) ++available;
+    const unsigned used = std::min<unsigned>(available, app.state().lane_count);
+    char detail[64]{};
+    std::snprintf(detail, sizeof(detail), "%02u:%02u / %02u:%02u   %u/%u CH", static_cast<unsigned>(elapsed / 60000000), static_cast<unsigned>(elapsed / 1000000 % 60), static_cast<unsigned>(duration / 60000000), static_cast<unsigned>(duration / 1000000 % 60), used, available);
+    line(detail, 8, 76, 224, &fonts::Font0, muted);
+    for (unsigned button = 0; button < 2; ++button) {
+        const int x = button ? 126 : 8;
+        const bool focus = input.playerButton() == button;
+        frame.fillRect(x, 91, 106, 23, focus ? accent : background);
+        frame.drawRect(x, 91, 106, 23, focus ? accent : muted);
+        line(button ? player.playing() ? "STOP" : "PLAY" : "LOAD", x + 10, 94, 86, &fonts::Font2, focus ? background : ink, focus ? accent : background);
+    }
+    rule(117);
+    line(",/ SELECT  ENTER OK  ESC BACK", 8, 124, 224, &fonts::Font0, muted);
+#else
+    static_cast<void>(app); static_cast<void>(input); static_cast<void>(nowUs);
+#endif
+}
+
 void Ui::drawOptions(const InputKeys& input, uint64_t nowUs) {
 #ifdef MIDIBRAIN_DISPLAY
     char title[64]{};
     char value[96]{};
     input.menuText(title, sizeof(title), value, sizeof(value));
     frame.fillScreen(background);
-    line("OPTIONS", 8, 3, 138);
+    line(input.browsingFiles() ? "MIDI FILES" : "OPTIONS", 8, 3, 138);
     char position[24]{};
     std::snprintf(position, sizeof(position), "%02u / %02u", static_cast<unsigned>(input.menuIndex() + 1), static_cast<unsigned>(input.menuCount()));
     line(position, 174, 8, 58, &fonts::Font0, muted);
@@ -343,7 +382,8 @@ void Ui::drawOptions(const InputKeys& input, uint64_t nowUs) {
     frame.setFont(&fonts::Orbitron_Light_24);
     frame.setTextSize(1);
     const float valueSize = std::min(1.0f, 214.0f / std::max(1, frame.textWidth(value)));
-    if (valueSize >= 0.75f) line(value, 18, 49, 214, &fonts::Orbitron_Light_24, ink, background, false, valueSize);
+    if (input.browsingFiles()) paragraph(value, 18, 53, 214, 2, ink);
+    else if (valueSize >= 0.75f) line(value, 18, 49, 214, &fonts::Orbitron_Light_24, ink, background, false, valueSize);
     else {
         frame.setFont(&fonts::Font2);
         if (frame.textWidth(value) <= 214) line(value, 18, 54, 214, &fonts::Font2);
@@ -356,6 +396,27 @@ void Ui::drawOptions(const InputKeys& input, uint64_t nowUs) {
     line(";. MOVE  ,/ SET  ENTER OK  TAB EXIT", 8, 124, 224, &fonts::Font0, muted);
 #else
     static_cast<void>(input); static_cast<void>(nowUs);
+#endif
+}
+
+void Ui::drawHelp(const InputKeys& input) {
+#ifdef MIDIBRAIN_DISPLAY
+    frame.fillScreen(background);
+    line("SHORTCUTS", 8, 3, 150);
+    char page[20]{};
+    std::snprintf(page, sizeof(page), "%u / %u", static_cast<unsigned>(input.helpPage() + 1), static_cast<unsigned>(HelpPages));
+    line(page, 184, 8, 48, &fonts::Font0, muted);
+    rule(22);
+    for (std::size_t row = 0; row < HelpRows; ++row) {
+        const auto index = input.helpPage() * HelpRows + row;
+        if (index >= std::size(shortcuts)) break;
+        line(shortcuts[index].key, 8, 31 + row * 13, 52, &fonts::Font0, selected);
+        line(shortcuts[index].description, 65, 31 + row * 13, 167, &fonts::Font0);
+    }
+    rule(117);
+    line(";, PREV  ./ NEXT  ESC BACK", 8, 124, 224, &fonts::Font0, muted);
+#else
+    static_cast<void>(input);
 #endif
 }
 
@@ -384,7 +445,9 @@ void Ui::update(uint64_t nowUs, const App& app, const UsbMidiSource& usb, const 
         return;
     }
 #endif
-    if (input.learning()) drawLearn(input);
+    if (input.helpOpen()) drawHelp(input);
+    else if (input.learning()) drawLearn(input);
+    else if (input.playerOpen()) drawMidiPlayer(app, input, nowUs);
     else if (input.menuOpen()) drawOptions(input, nowUs);
     else {
         if (view_ == DisplayView::Chord) drawPerformance(app, usb, ble, profiles);

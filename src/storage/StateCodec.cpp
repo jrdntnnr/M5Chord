@@ -1,6 +1,7 @@
 #include "storage/StateCodec.h"
 namespace midibrain {
-uint32_t StateCodec::fingerprint(const AppState& state) {
+namespace {
+uint32_t stateFingerprint(const AppState& state, bool current) {
     const int values[]{
         static_cast<int>(state.mode),
         static_cast<int>(state.harmonic.quality),
@@ -43,11 +44,18 @@ uint32_t StateCodec::fingerprint(const AppState& state) {
     for (int value : values) {
         for (unsigned shift = 0; shift < 32; shift += 8) { hash ^= (static_cast<uint32_t>(value) >> shift) & 255U; hash *= 16777619U; }
     }
+    if (current) for (int value : {static_cast<int>(state.input_port), static_cast<int>(state.lane_count)}) {
+        for (unsigned shift = 0; shift < 32; shift += 8) { hash ^= (static_cast<uint32_t>(value) >> shift) & 255U; hash *= 16777619U; }
+    }
     return hash;
 }
+}
+uint32_t StateCodec::fingerprint(const AppState& state) { return stateFingerprint(state, true); }
 void StateCodec::encode(const AppState& state, JsonDocument& document) {
     document.clear();
-    document["schema"] = 2;
+    document["schema"] = 3;
+    document["input_port"] = state.input_port;
+    document["lane_count"] = state.lane_count;
     document["mode"] = static_cast<int>(state.mode);
     document["quality"] = static_cast<int>(state.harmonic.quality);
     document["extensions"] = state.harmonic.extension_stack ? state.harmonic.extensions : 0;
@@ -87,7 +95,7 @@ void StateCodec::encode(const AppState& state, JsonDocument& document) {
     document["checksum"] = fingerprint(state);
 }
 bool StateCodec::decode(const JsonDocument& document, AppState& state) {
-    if (document["schema"] != 2) return false;
+    if (document["schema"] != 2 && document["schema"] != 3) return false;
     AppState decoded;
     if (!document["mode"].is<int>() || document["mode"].as<int>() < 0 || document["mode"].as<int>() > 2) return false;
     decoded.mode = static_cast<EngineMode>(document["mode"].as<int>());
@@ -163,7 +171,13 @@ bool StateCodec::decode(const JsonDocument& document, AppState& state) {
     decoded.velocity_sensitive = document["velocity"].as<int>() != 0;
     if (decoded.root_input_low > decoded.root_input_high) return false;
     if (decoded.loop_bars && (decoded.loop_bars & (decoded.loop_bars - 1))) return false;
-    if (!document["checksum"].is<uint32_t>() || document["checksum"].as<uint32_t>() != fingerprint(decoded)) return false;
+    if (document["schema"] == 3) {
+        if (!document["input_port"].is<int>() || document["input_port"].as<int>() < 0 || document["input_port"].as<int>() > 3) return false;
+        if (!document["lane_count"].is<int>() || document["lane_count"].as<int>() < 1 || document["lane_count"].as<int>() > 16) return false;
+        decoded.input_port = document["input_port"].as<uint8_t>();
+        decoded.lane_count = document["lane_count"].as<uint8_t>();
+    }
+    if (!document["checksum"].is<uint32_t>() || document["checksum"].as<uint32_t>() != stateFingerprint(decoded, document["schema"] == 3)) return false;
     if (!decoded.harmonic.extension_stack) decoded.harmonic.extensions = 0;
     decoded.stats = state.stats;
     state = decoded;

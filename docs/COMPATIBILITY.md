@@ -45,12 +45,12 @@ Release G0 and power-cycle afterward. Native USB becomes a host; disappearance o
 
 ## Distribution
 
-The [M5Chord 1.0 release package](https://github.com/jrdntnnr/M5Chord/releases/tag/v1.0) contains:
+The [M5Chord 1.1.0 release package](https://github.com/jrdntnnr/M5Chord/releases/tag/v1.1.0) contains:
 
 | File | Address | Use |
 |---|---|---|
-| `M5Chord-v1.0-universal.bin` | `0x0000` | Fresh installation; resets NVS settings and OTA selection |
-| `M5Chord-v1.0-app.bin` | `0x10000` | Update with this project's matching partition layout and app0 selected |
+| `M5Chord-v1.1.0-universal.bin` | `0x0000` | Fresh installation; resets NVS settings and OTA selection |
+| `M5Chord-v1.1.0-app.bin` | `0x10000` | Update with this project's matching partition layout and app0 selected |
 | `bootloader.bin`, `partitions.bin`, `boot_app0.bin` | `0x0000`, `0x8000`, `0xE000` | Separate-component update with the app, retaining NVS |
 | `SHA256SUMS` / `manifest.json` | — | Integrity, offsets, input hashes and acceptance status |
 
@@ -59,10 +59,10 @@ The factory image comes from build products, not a user's flash dump. Its gaps o
 To package another build, use PlatformIO's Python interpreter with esptool dependencies installed and choose a new output directory:
 
 ```sh
-python3 tools/package_firmware.py --core-dir .pio --output dist/M5Chord-v1.0 --version 1.0
+python3 tools/package_firmware.py --core-dir .pio --output dist/M5Chord-v1.1.0 --version 1.1.0
 ```
 
-On this Mac that interpreter is `/usr/local/opt/python@3.10/bin/python3.10`. Packaging verifies the pinned 8 MB partition table/checksum, segment bounds, exact merged segment bytes and empty factory NVS. Nine Python regression tests cover valid and malformed inputs. Merge format: [Espressif esptool](https://docs.espressif.com/projects/esptool/en/release-v4/esp32/esptool/basic-commands.html).
+On this Mac that interpreter is `/usr/local/opt/python@3.10/bin/python3.10`. Packaging verifies the pinned 8 MB partition table/checksum, segment bounds, exact merged segment bytes and empty factory NVS. Ten Python regression tests cover valid and malformed inputs. Merge format: [Espressif esptool](https://docs.espressif.com/projects/esptool/en/release-v4/esp32/esptool/basic-commands.html).
 
 The factory binary is a candidate for M5Burner's USER CUSTOM → Publish workflow. Account publication, device-family catalog placement and M5Burner installation still need validation. `manifest.json` is project metadata, not an M5Burner import schema. No publication was performed. See [M5Burner publishing](https://docs.m5stack.com/en/uiflow/m5burner/publish).
 

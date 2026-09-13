@@ -1,5 +1,6 @@
 #include "storage/ProfileStore.h"
 #include "storage/AtomicFile.h"
+#include "storage/SdPaths.h"
 #include "hardware/CardputerHardware.h"
 #include <cstdio>
 #include <cstring>
@@ -9,22 +10,23 @@
 #endif
 
 namespace midibrain {
+ProfileStore::ProfileStore() { std::snprintf(active_path_, sizeof(active_path_), "%s", SdPaths::DefaultProfile); }
 bool ProfileStore::begin() {
 #ifdef ARDUINO
     SPI.begin(CardputerPins::SdClock, CardputerPins::SdMiso, CardputerPins::SdMosi, CardputerPins::SdSelect);
     available_ = SD.begin(CardputerPins::SdSelect,SPI,25000000);
     if (available_) {
-        SD.mkdir("/midi-brain");
-        SD.mkdir("/midi-brain/controllers");
-        SD.mkdir("/midi-brain/presets");
-        SD.mkdir("/midi-brain/loops");
-        SD.mkdir("/midi-brain/logs");
+        SD.mkdir(SdPaths::Root);
+        SD.mkdir(SdPaths::Controllers);
+        SD.mkdir(SdPaths::Presets);
+        SD.mkdir(SdPaths::Loops);
+        SD.mkdir(SdPaths::Logs);
         Preferences preferences;
         if (preferences.begin("midi-brain",true)) {
             if (preferences.isKey("profile")) preferences.getString("profile",active_path_,sizeof(active_path_));
             preferences.end();
-            if (std::strncmp(active_path_,"/midi-brain/controllers/",23) || std::strstr(active_path_,".."))
-                std::snprintf(active_path_,sizeof(active_path_),"/midi-brain/controllers/smk37.json");
+            if (!SdPaths::validProfile(active_path_))
+                std::snprintf(active_path_,sizeof(active_path_),"%s",SdPaths::DefaultProfile);
         }
         scan();
     }
@@ -35,7 +37,7 @@ bool ProfileStore::begin() {
 void ProfileStore::scan() {
     count_ = 0;
 #ifdef ARDUINO
-    File directory = SD.open("/midi-brain/controllers");
+    File directory = SD.open(SdPaths::Controllers);
     if (!directory) return;
     for (File file = directory.openNextFile(); file && count_ < paths_.size(); file = directory.openNextFile()) {
         const char* name = file.name();
@@ -43,7 +45,7 @@ void ProfileStore::scan() {
         if (!file.isDirectory() && size > 5 && !std::strcmp(name + size - 5,".json")) {
             const char* base = std::strrchr(name,'/');
             base = base ? base + 1 : name;
-            const int written = std::snprintf(paths_[count_].data(),paths_[count_].size(),"/midi-brain/controllers/%s",base);
+            const int written = std::snprintf(paths_[count_].data(),paths_[count_].size(),"%s%s",SdPaths::ControllerPrefix,base);
             if (written > 0 && written < static_cast<int>(paths_[count_].size())) ++count_;
         }
         file.close();
@@ -97,7 +99,7 @@ bool ProfileStore::saveSmk37(const FixedList<ControllerMapping,PadLearner::Mappi
     if (mappings.size() != PadLearner::MappingCount) return false;
     profile_ = ControllerProfile{};
     std::snprintf(profile_.name,sizeof(profile_.name),"SMK37");
-    std::snprintf(active_path_,sizeof(active_path_),"/midi-brain/controllers/smk37.json");
+    std::snprintf(active_path_,sizeof(active_path_),"%s",SdPaths::DefaultProfile);
     for (const auto& m : mappings) profile_.mapper.add(m);
     const AppState state{};
     return saveActive(profile_.mapper,state);

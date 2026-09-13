@@ -6,7 +6,7 @@ namespace midibrain {
 
 class BleMidiSubscription {
 public:
-    enum class Operation : uint8_t { None, Register, Enable, Disconnect };
+    enum class Operation : uint8_t { None, Register, Enable, Disconnect, Read, Encrypt };
 
     void start(uint64_t nowUs) {
         reset();
@@ -16,12 +16,30 @@ public:
 
     void reset() { *this = BleMidiSubscription{}; }
     bool ready() const { return ready_; }
-    void notificationSeen() { data_seen_ = true; }
+    void readComplete(bool success, uint64_t nowUs, bool authenticationRequired = false) {
+        if (phase_ != Phase::ReadWait) return;
+        phase_ = success ? Phase::Register : authenticationRequired && !security_attempted_ ? Phase::Encrypt : Phase::Failed;
+        deadline_us_ = nowUs;
+    }
+    void encrypted(bool success, uint64_t nowUs) {
+        if (phase_ != Phase::EncryptionWait) return;
+        phase_ = success ? Phase::Settle : Phase::Failed;
+        deadline_us_ = nowUs;
+    }
 
     Operation poll(uint64_t nowUs) {
         if (phase_ == Phase::Idle || nowUs < deadline_us_) return Operation::None;
         switch (phase_) {
+            case Phase::Encrypt:
+                security_attempted_ = true;
+                phase_ = Phase::EncryptionWait;
+                deadline_us_ = nowUs + 10000000;
+                return Operation::Encrypt;
             case Phase::Settle:
+                phase_ = Phase::ReadWait;
+                deadline_us_ = nowUs + 2000000;
+                return Operation::Read;
+            case Phase::Register:
                 phase_ = Phase::RegisterWait;
                 deadline_us_ = nowUs + 2000000;
                 return Operation::Register;
@@ -32,17 +50,13 @@ public:
                 return Operation::Enable;
             case Phase::RegisterWait:
             case Phase::EnableWait:
+            case Phase::ReadWait:
+            case Phase::EncryptionWait:
             case Phase::Failed:
                 phase_ = Phase::Idle;
                 ready_ = false;
                 return Operation::Disconnect;
             case Phase::Ready:
-                if (!refreshed_ && !data_seen_) {
-                    refreshed_ = true;
-                    attempts_ = 0;
-                    phase_ = Phase::Enable;
-                    return poll(nowUs);
-                }
                 return Operation::None;
             case Phase::Idle:
                 return Operation::None;
@@ -69,13 +83,12 @@ public:
     }
 
 private:
-    enum class Phase : uint8_t { Idle, Settle, RegisterWait, Enable, EnableWait, Ready, Failed };
+    enum class Phase : uint8_t { Idle, Settle, ReadWait, Encrypt, EncryptionWait, Register, RegisterWait, Enable, EnableWait, Ready, Failed };
     Phase phase_{Phase::Idle};
     uint64_t deadline_us_{0};
     uint8_t attempts_{0};
     bool ready_{false};
-    bool data_seen_{false};
-    bool refreshed_{false};
+    bool security_attempted_{false};
 };
 
 }

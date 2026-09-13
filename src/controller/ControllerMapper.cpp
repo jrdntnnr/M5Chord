@@ -21,6 +21,15 @@ struct NamedAction {
 };
 
 constexpr NamedAction namedActions[]{
+    {"help.toggle", SemanticAction::HelpToggle},
+    {"ble.reconnect", SemanticAction::BleReconnect},
+    {"input.port.next", SemanticAction::InputPortNext},
+    {"output.lane.count", SemanticAction::LaneCountSet},
+    {"file.browse", SemanticAction::MidiFileBrowse},
+    {"file.load", SemanticAction::MidiFileLoad},
+    {"file.play", SemanticAction::MidiFilePlay},
+    {"file.stop", SemanticAction::MidiFileStop},
+    {"file.panel", SemanticAction::MidiFilePanel},
     {"mapping.edit", SemanticAction::MappingEdit},
     {"velocity.toggle", SemanticAction::VelocityToggle},
     {"chord.dim", SemanticAction::ChordDim},
