@@ -1,0 +1,15 @@
+.pio/
+.cache/
+build/
+build-preview/
+build-sanitized/
+compile_commands.json
+.DS_Store
+dist/
+__pycache__/
+*.py[cod]
+.venv/
+build-*/
+.env
+.env.*
+.local/
